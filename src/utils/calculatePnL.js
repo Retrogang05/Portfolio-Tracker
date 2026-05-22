@@ -1,21 +1,22 @@
 // Match opening and closing trades and compute realized P&L per position.
-// Tastytrade reports net cash impact in the Amount column:
-//   Sell to Open  → positive (credit received)
-//   Buy to Close  → negative (debit paid)
-//   Buy to Open   → negative (debit paid)
-//   Sell to Close → positive (credit received)
-// Realized P&L = open Amount + close Amount (fees already embedded or tracked separately)
+//
+// Tastytrade Total column = net cash flow (Value + Commissions + Fees):
+//   Sell to Open  → positive (credit received, net of fees)
+//   Buy to Close  → negative (debit paid, net of fees)
+//   Buy to Open   → negative (debit paid, net of fees)
+//   Sell to Close → positive (credit received, net of fees)
+//   Expiration    → $0 (option expired worthless)
+//
+// Realized P&L = open Total + close Total
 
 export function buildTrades(rows) {
-  // Separate opens and closes
   const opens = rows.filter(r => r.openClose === 'Open')
   const closes = rows.filter(r => r.openClose === 'Close')
 
-  // Build a key for matching: underlying + expiration + strike + callPut
-  const key = r =>
-    `${r.underlying}|${r.expiration}|${r.strike}|${r.callPut}`
+  // Match key: underlying + expiration + strike + callPut
+  const key = r => `${r.underlying}|${r.expiration}|${r.strike}|${r.callPut}`
 
-  // Group opens by key (FIFO queue)
+  // Group opens by key (FIFO)
   const openMap = {}
   for (const o of opens) {
     const k = key(o)
@@ -34,14 +35,12 @@ export function buildTrades(rows) {
     while (remainingClose > 0 && queue.length > 0) {
       const open = queue[0]
       const matchedQty = Math.min(open.remainingQty, remainingClose)
-      const fraction = matchedQty / c.quantity
-      const openFraction = matchedQty / open.quantity
+      const openFrac = matchedQty / open.quantity
+      const closeFrac = matchedQty / c.quantity
 
-      const openAmount = open.amount * openFraction
-      const closeAmount = c.amount * fraction
-      const openFees = open.fees * openFraction
-      const closeFees = c.fees * fraction
-      const pnl = openAmount + closeAmount // net cash (fees already included)
+      const openAmount = open.amount * openFrac
+      const closeAmount = c.amount * closeFrac
+      const pnl = openAmount + closeAmount // Total already includes commissions & fees
 
       closedTrades.push({
         underlying: c.underlying,
@@ -51,16 +50,16 @@ export function buildTrades(rows) {
         quantity: matchedQty,
         openDate: open.date,
         closeDate: c.date,
-        openSubcode: open.subcode,
-        closeSubcode: c.subcode,
+        openSubType: open.subType,
+        closeSubType: c.isExpiration ? 'Expired' : c.subType,
         openPrice: open.price,
         closePrice: c.price,
         openAmount,
         closeAmount,
-        fees: openFees + closeFees,
+        isExpiration: c.isExpiration,
         pnl,
         isWin: pnl > 0,
-        daysHeld: Math.round((c.date - open.date) / 86400000),
+        daysHeld: Math.max(0, Math.round((c.date - open.date) / 86400000)),
       })
 
       open.remainingQty -= matchedQty
@@ -73,7 +72,6 @@ export function buildTrades(rows) {
     }
   }
 
-  // Remaining open positions
   const openPositions = Object.values(openMap)
     .flat()
     .filter(o => o.remainingQty > 0)
@@ -92,9 +90,8 @@ export function computeStats(closedTrades) {
   const avgLoss = losses.length ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0
   const largestWin = wins.length ? Math.max(...wins.map(t => t.pnl)) : 0
   const largestLoss = losses.length ? Math.min(...losses.map(t => t.pnl)) : 0
-  const totalFees = closedTrades.reduce((s, t) => s + t.fees, 0)
 
-  // Cumulative P&L over time (sorted by close date)
+  // Cumulative P&L over time
   const sorted = [...closedTrades].sort((a, b) => a.closeDate - b.closeDate)
   let cumulative = 0
   const cumulativeData = sorted.map(t => {
@@ -108,25 +105,25 @@ export function computeStats(closedTrades) {
   })
 
   // P&L by underlying
-  const byUnderlying = {}
+  const byUnderlyingMap = {}
   for (const t of closedTrades) {
-    if (!byUnderlying[t.underlying]) byUnderlying[t.underlying] = { pnl: 0, count: 0, wins: 0 }
-    byUnderlying[t.underlying].pnl += t.pnl
-    byUnderlying[t.underlying].count++
-    if (t.isWin) byUnderlying[t.underlying].wins++
+    if (!byUnderlyingMap[t.underlying]) byUnderlyingMap[t.underlying] = { pnl: 0, count: 0, wins: 0 }
+    byUnderlyingMap[t.underlying].pnl += t.pnl
+    byUnderlyingMap[t.underlying].count++
+    if (t.isWin) byUnderlyingMap[t.underlying].wins++
   }
-  const byUnderlyingArr = Object.entries(byUnderlying)
+  const byUnderlying = Object.entries(byUnderlyingMap)
     .map(([symbol, v]) => ({ symbol, pnl: parseFloat(v.pnl.toFixed(2)), count: v.count, wins: v.wins }))
     .sort((a, b) => b.pnl - a.pnl)
 
   // P&L by month
-  const byMonth = {}
+  const byMonthMap = {}
   for (const t of closedTrades) {
     const month = t.closeDate.toISOString().slice(0, 7)
-    if (!byMonth[month]) byMonth[month] = 0
-    byMonth[month] += t.pnl
+    if (!byMonthMap[month]) byMonthMap[month] = 0
+    byMonthMap[month] += t.pnl
   }
-  const byMonthArr = Object.entries(byMonth)
+  const byMonth = Object.entries(byMonthMap)
     .map(([month, pnl]) => ({ month, pnl: parseFloat(pnl.toFixed(2)) }))
     .sort((a, b) => a.month.localeCompare(b.month))
 
@@ -140,9 +137,8 @@ export function computeStats(closedTrades) {
     avgLoss,
     largestWin,
     largestLoss,
-    totalFees,
     cumulativeData,
-    byUnderlying: byUnderlyingArr,
-    byMonth: byMonthArr,
+    byUnderlying,
+    byMonth,
   }
 }

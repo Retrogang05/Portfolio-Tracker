@@ -57,7 +57,7 @@ export default function TradeTable({ trades }) {
               {col('daysHeld', 'Days')}
               {col('openPrice', 'Open $')}
               {col('closePrice', 'Close $')}
-              {col('fees', 'Fees')}
+              <th className="px-3 py-2 text-left text-xs text-slate-400 uppercase tracking-wider">Outcome</th>
               {col('pnl', 'P&L')}
             </tr>
           </thead>
@@ -66,8 +66,8 @@ export default function TradeTable({ trades }) {
               <tr key={i} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
                 <td className="px-3 py-2 font-mono font-semibold text-slate-200">{t.underlying}</td>
                 <td className="px-3 py-2">
-                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${t.callPut === 'C' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'}`}>
-                    {t.callPut === 'C' ? 'Call' : 'Put'}
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${t.callPut === 'CALL' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'}`}>
+                    {t.callPut === 'CALL' ? 'Call' : 'Put'}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-slate-300">{t.strike}</td>
@@ -77,8 +77,13 @@ export default function TradeTable({ trades }) {
                 <td className="px-3 py-2 text-slate-400 text-xs">{fmtDate(t.closeDate)}</td>
                 <td className="px-3 py-2 text-slate-400">{t.daysHeld}d</td>
                 <td className="px-3 py-2 text-slate-300">{t.openPrice.toFixed(2)}</td>
-                <td className="px-3 py-2 text-slate-300">{t.closePrice.toFixed(2)}</td>
-                <td className="px-3 py-2 text-red-400 text-xs">{fmt(t.fees)}</td>
+                <td className="px-3 py-2 text-slate-300">{t.isExpiration ? '—' : t.closePrice.toFixed(2)}</td>
+                <td className="px-3 py-2">
+                  {t.isExpiration
+                    ? <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700 text-slate-400">Expired</span>
+                    : <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700/50 text-slate-500">Closed</span>
+                  }
+                </td>
                 <td className={`px-3 py-2 font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   {fmt(t.pnl)}
                 </td>
