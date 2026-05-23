@@ -183,6 +183,20 @@ export function computeStats(closedTrades) {
     .map(([strategy, v]) => ({ strategy, pnl: parseFloat(v.pnl.toFixed(2)), count: v.count, wins: v.wins }))
     .sort((a, b) => b.pnl - a.pnl)
 
+  // P&L by calendar day (for heatmap)
+  const dailyPnLMap = {}
+  for (const t of closedTrades) {
+    const date = t.closeDate.toISOString().split('T')[0]
+    if (!dailyPnLMap[date]) dailyPnLMap[date] = { pnl: 0, count: 0, trades: [] }
+    dailyPnLMap[date].pnl += t.pnl
+    dailyPnLMap[date].count++
+    dailyPnLMap[date].trades.push({
+      underlying: t.underlying,
+      strategy: t.strategyName,
+      pnl: t.pnl,
+    })
+  }
+
   // P&L by month
   const byMonthMap = {}
   for (const t of closedTrades) {
@@ -196,6 +210,7 @@ export function computeStats(closedTrades) {
 
   return {
     totalPnL,
+    dailyPnL: dailyPnLMap,
     totalTrades: closedTrades.length,
     wins: wins.length,
     losses: losses.length,

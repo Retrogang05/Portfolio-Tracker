@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import FileUpload from './components/FileUpload'
 import StatCard from './components/StatCard'
-import PnLChart from './components/PnLChart'
+import CalendarHeatmap from './components/CalendarHeatmap'
 import MonthlyChart from './components/MonthlyChart'
 import TickerBreakdown from './components/TickerBreakdown'
 import StrategyBreakdown from './components/StrategyBreakdown'
@@ -140,10 +140,9 @@ export default function App() {
               <StatCard label="Avg Days Held" value={`${Math.round(trades.reduce((s, t) => s + t.daysHeld, 0) / (trades.length || 1))}d`} />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PnLChart data={stats.cumulativeData} />
-              <MonthlyChart data={stats.byMonth} />
-            </div>
+            <CalendarHeatmap dailyPnL={stats.dailyPnL} />
+
+            <MonthlyChart data={stats.byMonth} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TickerBreakdown data={stats.byUnderlying} />
