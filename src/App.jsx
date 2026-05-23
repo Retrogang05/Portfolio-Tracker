@@ -5,9 +5,11 @@ import CalendarHeatmap from './components/CalendarHeatmap'
 import MonthlyChart from './components/MonthlyChart'
 import TickerBreakdown from './components/TickerBreakdown'
 import StrategyBreakdown from './components/StrategyBreakdown'
+import WheelTracker from './components/WheelTracker'
 import TradeTable from './components/TradeTable'
-import { parseCSV } from './utils/parseTastyworks'
+import { parseAllCSV } from './utils/parseTastyworks'
 import { tagRowsWithStrategy } from './utils/identifyStrategy'
+import { detectWheels } from './utils/detectWheel'
 import { buildTrades, computeStats } from './utils/calculatePnL'
 import { fmt } from './utils/format'
 
@@ -31,10 +33,10 @@ function applyOverrides(trades, overrides) {
 export default function App() {
   const [stats, setStats]       = useState(null)
   const [trades, setTrades]     = useState([])
+  const [wheels, setWheels]     = useState([])
   const [error, setError]       = useState(null)
   const [loading, setLoading]   = useState(false)
   const [fileName, setFileName] = useState('')
-  // Raw (auto-detected) trades — overrides are applied on top
   const [rawTrades, setRawTrades] = useState([])
   const [overrides, setOverrides] = useState(loadOverrides)
 
@@ -43,14 +45,25 @@ export default function App() {
     setError(null)
     setFileName(file.name)
     try {
-      const raw = await parseCSV(file)
-      const rows = tagRowsWithStrategy(raw)
-      const { closedTrades } = buildTrades(rows)
+      // Parse everything once — filter downstream as needed
+      const allRows = await parseAllCSV(file)
+
+      // P&L pipeline: option trades + expirations only
+      const optionRows = allRows.filter(r =>
+        (r.rowType === 'Trade' || r.rowType === 'Expiration') &&
+        (r.callPut === 'CALL' || r.callPut === 'PUT')
+      )
+      const taggedRows = tagRowsWithStrategy(optionRows)
+      const { closedTrades } = buildTrades(taggedRows)
       const currentOverrides = loadOverrides()
       const withOverrides = applyOverrides(closedTrades, currentOverrides)
       setRawTrades(closedTrades)
       setTrades(withOverrides)
       setStats(computeStats(withOverrides))
+
+      // Wheel / PMCC lifecycle detection
+      setWheels(detectWheels(allRows))
+
       if (!closedTrades.length) setError('No matched trades found. Make sure this is a Tastytrade transaction history CSV.')
     } catch (e) {
       setError(e.message)
@@ -73,6 +86,7 @@ export default function App() {
     setStats(null)
     setTrades([])
     setRawTrades([])
+    setWheels([])
     setFileName('')
     setError(null)
   }
@@ -139,6 +153,8 @@ export default function App() {
               <StatCard label="Total Trades" value={stats.totalTrades} />
               <StatCard label="Avg Days Held" value={`${Math.round(trades.reduce((s, t) => s + t.daysHeld, 0) / (trades.length || 1))}d`} />
             </div>
+
+            {wheels.length > 0 && <WheelTracker positions={wheels} />}
 
             <CalendarHeatmap dailyPnL={stats.dailyPnL} />
 
