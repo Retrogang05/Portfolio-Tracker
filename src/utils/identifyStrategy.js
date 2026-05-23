@@ -20,8 +20,10 @@ function classifyLegs(legs) {
   // ── Single leg ──────────────────────────────────────────────────────────────
   if (n === 1) {
     const [l] = legs
-    if (l.callPut === 'CALL') return isBuy(l) ? 'Long Call'  : 'Short Call'
-    /* PUT */                  return isBuy(l) ? 'Long Put'   : 'Short Put'
+    if (l.callPut === 'CALL') return isBuy(l) ? 'Long Call' : 'Short Call'
+    // Standalone short puts are treated as Wheel (CSP) entries by default.
+    // Multi-leg puts (spreads, condors) never reach this branch.
+    return isBuy(l) ? 'Long Put' : 'Wheel (CSP)'
   }
 
   // ── Two legs ────────────────────────────────────────────────────────────────
@@ -100,7 +102,8 @@ export const STRATEGY_NAMES = [
   'Long Call',
   'Short Call',
   'Long Put',
-  'Short Put',
+  'Wheel (CSP)',   // default for standalone short puts
+  'Short Put',     // override option if it's genuinely not a wheel entry
   // Vertical spreads
   'Bull Call Spread',
   'Bear Call Spread',

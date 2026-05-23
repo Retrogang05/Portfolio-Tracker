@@ -144,8 +144,11 @@ function tryDetectWheel(rows, underlying) {
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
 
   const hasAssignments = assignRows.length > 0
-  const hasMultipleLegs = shortCalls.length + shortPuts.length >= 2
-  if (!hasAssignments && !hasMultipleLegs) return null
+  // A single short put is enough — the user always sells puts as wheel entries.
+  // Standalone short-call-only positions still need ≥ 2 legs to avoid
+  // misclassifying one-off covered calls as wheel cycles.
+  const hasWheelActivity = shortPuts.length >= 1 || shortCalls.length >= 2 || hasAssignments
+  if (!hasWheelActivity) return null
 
   // Build call legs (short side only)
   const callLegRows = [
