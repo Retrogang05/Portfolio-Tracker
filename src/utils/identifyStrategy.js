@@ -5,6 +5,21 @@
 const isBuy = l => l.action.startsWith('BUY')
 const isSell = l => l.action.startsWith('SELL')
 
+// Parse "M/D/YY" expiration string into a Date
+function parseExpiry(s) {
+  if (!s) return null
+  const [m, d, y] = s.split('/')
+  if (!m || !d || !y) return null
+  return new Date(2000 + parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10))
+}
+
+// Days between leg open date and expiry
+function legDTE(leg) {
+  const expiry = parseExpiry(leg.expiration)
+  if (!expiry || !leg.date) return 0
+  return Math.round((expiry - leg.date) / 86400000)
+}
+
 function groupKey(row) {
   // Order # is the definitive link for multi-leg orders placed together
   if (row.orderId) return row.orderId
@@ -20,8 +35,11 @@ function classifyLegs(legs) {
   // ── Single leg ──────────────────────────────────────────────────────────────
   if (n === 1) {
     const [l] = legs
-    if (l.callPut === 'CALL') return isBuy(l) ? 'Long Call' : 'Short Call'
-    // Standalone short puts are treated as Wheel (CSP) entries by default.
+    if (l.callPut === 'CALL') {
+      if (isBuy(l) && legDTE(l) > 60) return 'PMCC (Long Leg)'
+      return isBuy(l) ? 'Long Call' : 'Short Call'
+    }
+    // Standalone short puts are wheel entries by default.
     // Multi-leg puts (spreads, condors) never reach this branch.
     return isBuy(l) ? 'Long Put' : 'Wheel (CSP)'
   }
@@ -99,11 +117,12 @@ function classifyLegs(legs) {
 // Single source of truth — used by the detector AND the override dropdown.
 export const STRATEGY_NAMES = [
   // Single leg
-  'Long Call',
+  'PMCC (Long Leg)', // default for standalone BTO calls with DTE > 60
+  'Long Call',       // override if it's genuinely a directional trade
   'Short Call',
   'Long Put',
-  'Wheel (CSP)',   // default for standalone short puts
-  'Short Put',     // override option if it's genuinely not a wheel entry
+  'Wheel (CSP)',     // default for standalone short puts
+  'Short Put',       // override if it's not a wheel entry
   // Vertical spreads
   'Bull Call Spread',
   'Bear Call Spread',

@@ -22,6 +22,7 @@ const STRATEGY_COLORS = {
   'Short Call':                'bg-orange-900/40 text-orange-400',
   'Wheel (CSP)':               'bg-teal-900/50 text-teal-300',
   'Short Put':                 'bg-emerald-900/40 text-emerald-400',
+  'PMCC (Long Leg)':           'bg-violet-900/60 text-violet-300',
   'Long Call':                 'bg-blue-900/40 text-blue-400',
   'Long Put':                  'bg-red-900/40 text-red-400',
 }
