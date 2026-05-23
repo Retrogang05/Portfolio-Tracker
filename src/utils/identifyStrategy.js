@@ -93,6 +93,47 @@ function classifyLegs(legs) {
   return 'Custom Combo'
 }
 
+// ── Strategy name registry ───────────────────────────────────────────────────
+// Single source of truth — used by the detector AND the override dropdown.
+export const STRATEGY_NAMES = [
+  // Single leg
+  'Long Call',
+  'Short Call',
+  'Long Put',
+  'Short Put',
+  // Vertical spreads
+  'Bull Call Spread',
+  'Bear Call Spread',
+  'Bull Put Spread',
+  'Bear Put Spread',
+  // Calendar / Diagonal
+  'Call Calendar',
+  'Call Diagonal',
+  'Put Calendar',
+  'Put Diagonal',
+  // Volatility
+  'Long Straddle',
+  'Short Straddle',
+  'Long Strangle',
+  'Short Strangle',
+  // Directional combos
+  'Risk Reversal',
+  'Synthetic Short',
+  // Tastytrade favourites
+  'Jade Lizard',
+  'Inverted Jade Lizard',
+  'Bull Call Spread + Short Put',
+  'Bear Put Spread + Short Call',
+  // Four-leg
+  'Iron Condor',
+  'Iron Butterfly',
+  'Reverse Iron Condor',
+  'Reverse Iron Butterfly',
+  'Box Spread',
+  // Catch-all
+  'Custom Combo',
+]
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
