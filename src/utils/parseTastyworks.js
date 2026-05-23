@@ -49,8 +49,12 @@ function transformRows(rows) {
       const callPut = (r['Call or Put'] || '').trim().toUpperCase() // 'CALL' or 'PUT'
       const isExpiration = (r['Type'] || '').trim() === 'Receive Deliver'
 
+      const date = parseDate(r['Date'] || '')
       return {
-        date: parseDate(r['Date'] || ''),
+        date,
+        // Seconds-precision string used as fallback group key for same-moment trades
+        timestampSec: Math.floor(date.getTime() / 1000).toString(),
+        orderId: (r['Order #'] || '').trim(),
         subType: (r['Sub Type'] || '').trim(),
         action,
         symbol: (r['Symbol'] || '').trim(),

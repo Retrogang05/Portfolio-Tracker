@@ -4,8 +4,10 @@ import StatCard from './components/StatCard'
 import PnLChart from './components/PnLChart'
 import MonthlyChart from './components/MonthlyChart'
 import TickerBreakdown from './components/TickerBreakdown'
+import StrategyBreakdown from './components/StrategyBreakdown'
 import TradeTable from './components/TradeTable'
 import { parseCSV } from './utils/parseTastyworks'
+import { tagRowsWithStrategy } from './utils/identifyStrategy'
 import { buildTrades, computeStats } from './utils/calculatePnL'
 import { fmt } from './utils/format'
 
@@ -21,7 +23,8 @@ export default function App() {
     setError(null)
     setFileName(file.name)
     try {
-      const rows = await parseCSV(file)
+      const raw = await parseCSV(file)
+      const rows = tagRowsWithStrategy(raw)
       const { closedTrades } = buildTrades(rows)
       const s = computeStats(closedTrades)
       setTrades(closedTrades)
@@ -94,7 +97,7 @@ export default function App() {
               <StatCard label="Largest Win" value={fmt(stats.largestWin)} positive={true} />
               <StatCard label="Largest Loss" value={fmt(stats.largestLoss)} positive={false} />
               <StatCard label="Total Trades" value={stats.totalTrades} />
-              <StatCard label="Total Fees" value={fmt(stats.totalFees)} positive={false} />
+              <StatCard label="Avg Days Held" value={`${Math.round(trades.reduce((s, t) => s + t.daysHeld, 0) / (trades.length || 1))}d`} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -102,7 +105,11 @@ export default function App() {
               <MonthlyChart data={stats.byMonth} />
             </div>
 
-            <TickerBreakdown data={stats.byUnderlying} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <TickerBreakdown data={stats.byUnderlying} />
+              <StrategyBreakdown data={stats.byStrategy} />
+            </div>
+
             <TradeTable trades={trades} />
           </>
         )}
