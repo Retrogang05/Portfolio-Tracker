@@ -100,6 +100,9 @@ function LegRow({ leg }) {
       <td className="px-3 py-1.5 text-slate-500">{leg.daysHeld}d</td>
       <td className="px-3 py-1.5 text-slate-400">{leg.openPrice?.toFixed(2) ?? '—'}</td>
       <td className="px-3 py-1.5 text-slate-400">{leg.isExpiration ? '—' : leg.closePrice?.toFixed(2) ?? '—'}</td>
+      <td className="px-3 py-1.5 text-orange-400 text-xs">
+        {leg.totalFees > 0 ? `-$${leg.totalFees.toFixed(2)}` : leg.isExpiration ? '—' : '—'}
+      </td>
       <td className="px-3 py-1.5">
         {leg.isExpiration
           ? <span className="text-slate-500">Expired</span>
@@ -133,11 +136,18 @@ function TradeRow({ trade, expanded, onToggle, onStrategyChange }) {
 
         {/* Editable strategy cell */}
         <td className="px-3 py-2">
-          <StrategyCell
-            name={trade.strategyName}
-            isOverridden={trade.isOverridden}
-            onSelect={newName => onStrategyChange(trade.strategyGroupId, newName)}
-          />
+          <div className="flex items-center gap-1.5">
+            <StrategyCell
+              name={trade.strategyName}
+              isOverridden={trade.isOverridden}
+              onSelect={newName => onStrategyChange(trade.strategyGroupId, newName)}
+            />
+            {trade.isDayTrade && (
+              <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-900/50 text-yellow-300 whitespace-nowrap shrink-0">
+                Day
+              </span>
+            )}
+          </div>
         </td>
 
         <td className="px-3 py-2">
@@ -154,6 +164,11 @@ function TradeRow({ trade, expanded, onToggle, onStrategyChange }) {
         <td className="px-3 py-2 text-slate-400 text-sm">{trade.daysHeld}d</td>
         <td className="px-3 py-2 text-slate-300 text-sm">{trade.openPrice?.toFixed(2) ?? '—'}</td>
         <td className="px-3 py-2 text-slate-300 text-sm">{trade.isExpiration ? '—' : trade.closePrice?.toFixed(2) ?? '—'}</td>
+
+        {/* Fees — 0 for expirations (Tastytrade charges nothing on worthless expiry) */}
+        <td className="px-3 py-2 text-xs text-orange-400">
+          {trade.totalFees > 0 ? `-$${trade.totalFees.toFixed(2)}` : '—'}
+        </td>
 
         <td className="px-3 py-2">
           {trade.isExpiration
@@ -244,10 +259,11 @@ export default function TradeTable({ trades, onStrategyChange }) {
               {col('openDate', 'Opened')}
               {col('closeDate', 'Closed')}
               {col('daysHeld', 'Days')}
-              {col('openPrice', 'Open $')}
+              {col('openPrice',  'Open $')}
               {col('closePrice', 'Close $')}
+              {col('totalFees',  'Fees')}
               <th className="px-3 py-2 text-left text-xs text-slate-400 uppercase tracking-wider">Outcome</th>
-              {col('pnl', 'P&L')}
+              {col('pnl', 'Net P&L')}
             </tr>
           </thead>
           <tbody>

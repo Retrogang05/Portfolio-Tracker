@@ -4,7 +4,25 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>options-tracker</title>
+    <title>Portfolio Tracker</title>
+    <!--
+      Content-Security-Policy
+      · default-src 'none'     — block everything not explicitly allowed
+      · script-src 'self' 'unsafe-inline' — allow bundled JS + the theme IIFE below
+      · style-src  'self' 'unsafe-inline' — allow Tailwind's injected styles
+      · connect-src 'none'     — explicitly block ALL fetch/XHR/WebSocket/beacon
+      · img-src 'self' data:   — allow bundled images + data: URIs (chart renders)
+      · font-src 'self'        — allow bundled fonts only
+    -->
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; font-src 'self';">
+    <!-- Apply saved theme before React mounts to avoid a flash of wrong theme -->
+    <script>
+      (function () {
+        if (localStorage.getItem('options-tracker:theme') === 'light')
+          document.documentElement.classList.add('light');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

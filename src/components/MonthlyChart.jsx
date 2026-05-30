@@ -15,10 +15,10 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-export default function MonthlyChart({ data }) {
+export default function MonthlyChart({ data, title = 'Monthly P&L' }) {
   return (
     <div className="bg-slate-800 rounded-xl p-5">
-      <h2 className="text-slate-300 font-semibold mb-4">Monthly P&L</h2>
+      <h2 className="text-slate-300 font-semibold mb-4">{title}</h2>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={data} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />

@@ -1,6 +1,19 @@
 import { useState } from 'react'
 import { fmt } from '../utils/format'
 
+// Compact formatter — no decimals, K/M suffix for large values
+function fmtC(n) {
+  if (n === null || n === undefined) return '—'
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 10_000)    return `${sign}$${Math.round(abs / 1_000)}k`
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(n)
+}
+
 // ── Shared atoms ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
@@ -69,9 +82,9 @@ function LegRow({ leg, showCallPut }) {
         </span>
       )}
 
-      <span className={`font-semibold text-sm w-20 text-right shrink-0 ${
+      <span className={`font-semibold text-sm text-right shrink-0 ${
         isWin ? 'text-emerald-400' : 'text-red-400'
-      }`}>{fmt(leg.netPremium)}</span>
+      }`}>{fmtC(leg.netPremium)}</span>
     </div>
   )
 }
@@ -129,7 +142,7 @@ function PMCCCard({ pos }) {
               <span className="text-slate-600 text-xs">{longLeg.dteAtOpen}d when bought</span>
             </div>
             <div className="text-right">
-              <p className="text-red-400 font-semibold text-sm">{fmt(longLeg.cost)}</p>
+              <p className="text-red-400 font-semibold text-sm truncate">{fmtC(longLeg.cost)}</p>
               <p className="text-slate-500 text-xs">${longLeg.costPerShare.toFixed(2)}/share</p>
             </div>
           </div>
@@ -145,17 +158,17 @@ function PMCCCard({ pos }) {
 
         {/* Stats row */}
         <div className="grid grid-cols-3 gap-3 pt-1">
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center">
+          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
             <p className="text-xs text-slate-500 mb-1">Collected</p>
-            <p className="text-emerald-400 font-bold text-sm">{fmt(premiumCollected)}</p>
+            <p className="text-emerald-400 font-bold text-sm truncate">{fmtC(premiumCollected)}</p>
           </div>
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center">
+          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
             <p className="text-xs text-slate-500 mb-1">Net Cost</p>
-            <p className={`font-bold text-sm ${netCost < 0 ? 'text-slate-200' : 'text-emerald-400'}`}>{fmt(netCost)}</p>
+            <p className={`font-bold text-sm truncate ${netCost < 0 ? 'text-slate-200' : 'text-emerald-400'}`}>{fmtC(netCost)}</p>
           </div>
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center">
+          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
             <p className="text-xs text-slate-500 mb-1">Breakeven</p>
-            <p className="text-slate-200 font-bold text-sm">${breakevenPerShare.toFixed(2)}</p>
+            <p className="text-slate-200 font-bold text-sm truncate">${breakevenPerShare.toFixed(2)}</p>
           </div>
         </div>
 
@@ -175,7 +188,7 @@ function PMCCCard({ pos }) {
 
         {openLeg && (
           <div className="text-xs text-slate-500 bg-violet-900/20 rounded-lg px-3 py-2 border border-violet-700/30">
-            Current short: <span className="text-violet-300 font-mono">${openLeg.strike}C</span> exp {openLeg.expiration} · <span className="text-emerald-400">{fmt(openLeg.netPremium)} collected</span>
+            Current short: <span className="text-violet-300 font-mono">${openLeg.strike}C</span> exp {openLeg.expiration} · <span className="text-emerald-400">{fmtC(openLeg.netPremium)} collected</span>
           </div>
         )}
       </div>
@@ -224,10 +237,10 @@ function WheelCard({ pos }) {
         </div>
 
         {/* Total premium */}
-        <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5">
-          <span className="text-slate-400 text-sm">Total premium collected</span>
-          <span className={`font-bold ${totalPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {fmt(totalPremium)}
+        <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5 gap-2 min-w-0">
+          <span className="text-slate-400 text-sm truncate">Total premium collected</span>
+          <span className={`font-bold shrink-0 ${totalPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {fmtC(totalPremium)}
           </span>
         </div>
       </div>

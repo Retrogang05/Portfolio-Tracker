@@ -214,10 +214,11 @@ export default function CalendarHeatmap({ dailyPnL }) {
   const monthDays = Object.keys(dailyPnL).filter(d => d.startsWith(monthPrefix)).length
 
   const firstYear  = parseInt(firstDateParts[0])
-  const firstMonth = parseInt(firstDateParts[1]) - 1
-  const canPrev = viewYear > firstYear || (viewYear === firstYear && viewMonth > firstMonth)
-  const canNext = viewYear < parseInt(lastDateParts[0]) ||
-                  (viewYear === parseInt(lastDateParts[0]) && viewMonth < parseInt(lastDateParts[1]) - 1)
+  const now = new Date()
+  // Allow back to January of the first data year; forward to the current month
+  const canPrev = viewYear > firstYear || (viewYear === firstYear && viewMonth > 0)
+  const canNext = viewYear < now.getFullYear() ||
+                  (viewYear === now.getFullYear() && viewMonth < now.getMonth())
 
   function prevMonth() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }

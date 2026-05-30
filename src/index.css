@@ -1,4 +1,26 @@
 @import "tailwindcss";
 
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background-color: var(--color-slate-900);
+  color: var(--color-slate-100);
+}
+
+/* ── Light theme: mirror the slate scale so every slate-N class flips ─────
+   Dark default:  slate-900 = near-black,  slate-100 = near-white
+   Light override: slate-900 = near-white, slate-100 = near-black           */
+.light {
+  --color-slate-50:  oklch(20.8% .042 265.755);
+  --color-slate-100: oklch(27.9% .041 260.031);
+  --color-slate-200: oklch(37.2% .044 257.287);
+  --color-slate-300: oklch(44.6% .043 257.281);
+  --color-slate-400: oklch(55.4% .046 257.417);
+  --color-slate-500: oklch(60%   .035 257.0);
+  --color-slate-600: oklch(70.4% .04  256.788);
+  --color-slate-700: oklch(86.9% .022 252.894);
+  --color-slate-800: oklch(92.9% .013 255.508);
+  --color-slate-900: oklch(96.8% .007 247.896);
+  --color-slate-950: oklch(98.5% .004 247.0);
+}

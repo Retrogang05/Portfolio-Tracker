@@ -1,3 +1,6 @@
+// Australian financial year helper — exported so components can group by FY consistently
+export const auFY = d => (d.getMonth() >= 6 ? d.getFullYear() + 1 : d.getFullYear()).toString()
+
 // Match opening and closing trades, compute realized P&L, and group into strategies.
 //
 // Tastytrade Total column = net cash flow (Value + Commissions + Fees):
@@ -39,7 +42,15 @@ export function buildTrades(rows) {
 
       const openAmount  = open.amount * openFrac
       const closeAmount = c.amount   * closeFrac
-      const pnl = openAmount + closeAmount
+      const pnl = openAmount + closeAmount  // already net of fees (amount = Total col)
+
+      // Fees: open always charged; close charged only when closing before expiry
+      // Tastytrade: commissions (per-contract) + fees (regulatory)
+      const openFees  = (Math.abs(open.commissions ?? 0) + Math.abs(open.fees ?? 0)) * openFrac
+      const closeFees = c.isExpiration
+        ? 0  // expires worthless → no closing fees
+        : (Math.abs(c.commissions ?? 0) + Math.abs(c.fees ?? 0)) * closeFrac
+      const totalFees = parseFloat((openFees + closeFees).toFixed(2))
 
       closedLegs.push({
         // Contract details
@@ -61,8 +72,9 @@ export function buildTrades(rows) {
         closePrice:    c.price,
         openAmount,
         closeAmount,
-        // P&L
+        // P&L — net of fees (fees already deducted via amount=Total)
         pnl,
+        totalFees,     // visible breakdown: open fees + close fees (0 if expired)
         isWin: pnl > 0,
         // Strategy (from the opening leg — closing legs inherit via group)
         strategyName:    open.strategyName    ?? 'Unknown',
@@ -103,9 +115,18 @@ function groupLegsIntoTrades(legs) {
   }
 
   return Object.values(groups).map(group => {
-    if (group.length === 1) return { ...group[0], legs: group }
+    if (group.length === 1) return {
+      ...group[0],
+      isDayTrade: group[0].daysHeld <= 2,
+      totalFees: group[0].totalFees ?? 0,
+      legs: group,
+    }
 
-    const pnl = group.reduce((s, l) => s + l.pnl, 0)
+    const pnl        = group.reduce((s, l) => s + l.pnl, 0)
+    const totalFees  = parseFloat(group.reduce((s, l) => s + (l.totalFees ?? 0), 0).toFixed(2))
+    // Preserve gross cash-flow amounts for CGT reporting (ATO requires separate proceeds / cost base)
+    const openAmount  = group.reduce((s, l) => s + (l.openAmount  ?? 0), 0)
+    const closeAmount = group.reduce((s, l) => s + (l.closeAmount ?? 0), 0)
     const first = group[0]
     const openDates  = group.map(l => l.openDate)
     const closeDates = group.map(l => l.closeDate)
@@ -119,8 +140,12 @@ function groupLegsIntoTrades(legs) {
       closeDate:       new Date(Math.max(...closeDates)),
       daysHeld:        Math.max(...group.map(l => l.daysHeld)),
       isExpiration:    group.every(l => l.isExpiration),
+      openAmount,
+      closeAmount,
       pnl,
-      isWin: pnl > 0,
+      totalFees,
+      isWin:      pnl > 0,
+      isDayTrade: Math.max(...group.map(l => l.daysHeld)) <= 2,
       // Multi-leg: no single strike/callPut — consumers check legs[]
       callPut:    group.length === 1 ? first.callPut    : null,
       strike:     group.length === 1 ? first.strike     : null,
@@ -208,6 +233,50 @@ export function computeStats(closedTrades) {
     .map(([month, pnl]) => ({ month, pnl: parseFloat(pnl.toFixed(2)) }))
     .sort((a, b) => a.month.localeCompare(b.month))
 
+  // P&L by Australian financial year: 1 Jul – 30 Jun (labelled by ending year)
+  // e.g. a trade closing Oct 2024 → FY2025
+  const toFY = auFY
+
+  const byYearMap = {}
+  for (const t of closedTrades) {
+    const year = toFY(t.closeDate)
+    if (!byYearMap[year]) byYearMap[year] = { pnl: 0, count: 0, wins: 0, losses: 0, months: {} }
+    byYearMap[year].pnl += t.pnl
+    byYearMap[year].count++
+    if (t.isWin) byYearMap[year].wins++
+    else byYearMap[year].losses++
+    const month = t.closeDate.toISOString().slice(0, 7)
+    if (!byYearMap[year].months[month]) byYearMap[year].months[month] = { pnl: 0, count: 0, wins: 0 }
+    byYearMap[year].months[month].pnl += t.pnl
+    byYearMap[year].months[month].count++
+    if (t.isWin) byYearMap[year].months[month].wins++
+  }
+  const byYear = Object.entries(byYearMap)
+    .map(([year, v]) => {
+      const monthList = Object.entries(v.months)
+        .map(([month, m]) => ({ month, pnl: parseFloat(m.pnl.toFixed(2)), count: m.count, wins: m.wins }))
+        .sort((a, b) => a.month.localeCompare(b.month))
+      const monthPnLs = monthList.map(m => m.pnl)
+      const bestMonth  = monthList.length ? monthList.reduce((a, b) => b.pnl > a.pnl ? b : a) : null
+      const worstMonth = monthList.length ? monthList.reduce((a, b) => b.pnl < a.pnl ? b : a) : null
+      const yearWins   = closedTrades.filter(t => toFY(t.closeDate) === year && t.isWin)
+      const yearLosses = closedTrades.filter(t => toFY(t.closeDate) === year && !t.isWin)
+      return {
+        year,
+        pnl: parseFloat(v.pnl.toFixed(2)),
+        count: v.count,
+        wins: v.wins,
+        losses: v.losses,
+        winRate: v.count > 0 ? (v.wins / v.count) * 100 : 0,
+        avgWin:  yearWins.length   ? yearWins.reduce((s, t)   => s + t.pnl, 0) / yearWins.length   : 0,
+        avgLoss: yearLosses.length ? yearLosses.reduce((s, t) => s + t.pnl, 0) / yearLosses.length : 0,
+        bestMonth,
+        worstMonth,
+        months: monthList,
+      }
+    })
+    .sort((a, b) => a.year.localeCompare(b.year))
+
   return {
     totalPnL,
     dailyPnL: dailyPnLMap,
@@ -223,5 +292,6 @@ export function computeStats(closedTrades) {
     byUnderlying,
     byStrategy,
     byMonth,
+    byYear,
   }
 }
