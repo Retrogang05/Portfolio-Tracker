@@ -2,6 +2,12 @@ import { useState, useMemo } from 'react'
 import { fmt } from '../utils/format'
 
 const DOW   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+const JOURNAL_MOOD_COLOR = {
+  good:    '#34d399',
+  neutral: '#fbbf24',
+  bad:     '#f87171',
+}
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 
@@ -81,10 +87,10 @@ function computeDowStats(dailyPnL) {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function DayCell({ cell, data, colors, isHovered, onEnter, onLeave }) {
+function DayCell({ cell, data, colors, isHovered, onEnter, onLeave, journalMood }) {
   return (
     <div
-      className="rounded-lg flex flex-col justify-between p-2 cursor-default select-none transition-all"
+      className="rounded-lg flex flex-col justify-between p-2 cursor-default select-none transition-all relative"
       style={{
         backgroundColor: colors.bg,
         height: 72,
@@ -98,6 +104,14 @@ function DayCell({ cell, data, colors, isHovered, onEnter, onLeave }) {
         <span className="text-xs font-bold leading-none" style={{ color: colors.amount }}>
           {fmtCompact(data.pnl)}
         </span>
+      )}
+      {/* Journal dot */}
+      {journalMood && (
+        <span
+          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+          style={{ backgroundColor: JOURNAL_MOOD_COLOR[journalMood] ?? '#94a3b8' }}
+          title="Journal entry"
+        />
       )}
     </div>
   )
@@ -188,7 +202,7 @@ function Legend() {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function CalendarHeatmap({ dailyPnL }) {
+export default function CalendarHeatmap({ dailyPnL, journalDates = {} }) {
   const allDates = useMemo(() => Object.keys(dailyPnL).sort(), [dailyPnL])
   if (!allDates.length) return null
 
@@ -293,6 +307,7 @@ export default function CalendarHeatmap({ dailyPnL }) {
                   isHovered={hovered === cell.key}
                   onEnter={() => setHovered(cell.key)}
                   onLeave={() => setHovered(null)}
+                  journalMood={journalDates[cell.key] ?? null}
                 />
               )
             })}

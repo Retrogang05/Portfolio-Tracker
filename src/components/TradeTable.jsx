@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { fmt } from '../utils/format'
 import { STRATEGY_NAMES } from '../utils/identifyStrategy'
 
@@ -115,7 +115,38 @@ function LegRow({ leg }) {
   )
 }
 
-function TradeRow({ trade, expanded, onToggle, onStrategyChange }) {
+function NoteRow({ colSpan, noteKey, initialValue, onSaved }) {
+  const [text, setText] = useState(initialValue ?? '')
+
+  function handleBlur() {
+    const val = text.trim()
+    if (val) {
+      localStorage.setItem(noteKey, val)
+    } else {
+      localStorage.removeItem(noteKey)
+    }
+    onSaved(val)
+  }
+
+  return (
+    <tr className="border-b border-slate-700/30">
+      <td colSpan={colSpan} className="px-4 py-2 bg-amber-900/10">
+        <textarea
+          autoFocus
+          rows={2}
+          className="w-full bg-transparent text-sm text-slate-300 placeholder-slate-600 resize-none focus:outline-none leading-relaxed"
+          placeholder="Add a note for this trade… (saved automatically when you click away)"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onBlur={handleBlur}
+        />
+      </td>
+    </tr>
+  )
+}
+
+function TradeRow({ trade, note, noteKey, expanded, onToggle, onStrategyChange, onNoteUpdate }) {
+  const [noteOpen, setNoteOpen] = useState(false)
   const isMultiLeg = trade.legs?.length > 1
   const callPutLabel = trade.callPut === 'CALL' ? 'Call' : trade.callPut === 'PUT' ? 'Put' : null
 
@@ -176,10 +207,32 @@ function TradeRow({ trade, expanded, onToggle, onStrategyChange }) {
             : <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700/50 text-slate-500">Closed</span>}
         </td>
 
-        <td className={`px-3 py-2 font-bold text-sm ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-          {fmt(trade.pnl)}
+        <td className="px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            <span className={`font-bold text-sm ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {fmt(trade.pnl)}
+            </span>
+            <button
+              onClick={e => { e.stopPropagation(); setNoteOpen(v => !v) }}
+              title={note ? 'View / edit note' : 'Add note'}
+              className={`text-xs leading-none transition-colors ${
+                note ? 'text-amber-400 hover:text-amber-300' : 'text-slate-600 hover:text-slate-400'
+              }`}
+            >
+              📝
+            </button>
+          </div>
         </td>
       </tr>
+
+      {noteOpen && (
+        <NoteRow
+          colSpan={15}
+          noteKey={noteKey}
+          initialValue={note}
+          onSaved={val => { onNoteUpdate(trade.strategyGroupId, val); setNoteOpen(false) }}
+        />
+      )}
 
       {isMultiLeg && expanded && trade.legs.map((leg, i) => (
         <LegRow key={i} leg={leg} />
@@ -188,12 +241,33 @@ function TradeRow({ trade, expanded, onToggle, onStrategyChange }) {
   )
 }
 
-export default function TradeTable({ trades, onStrategyChange }) {
+export default function TradeTable({ trades, onStrategyChange, portfolioIdx = 0 }) {
   const [page, setPage]         = useState(0)
   const [sortKey, setSortKey]   = useState('closeDate')
   const [sortDir, setSortDir]   = useState(-1)
   const [filter, setFilter]     = useState('')
   const [expanded, setExpanded] = useState({})
+  const [notes, setNotes]       = useState({})
+
+  // Load notes for this portfolio from localStorage
+  useEffect(() => {
+    const prefix = `portfolio-tracker:note:opt:${portfolioIdx}:`
+    const result = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(prefix)) result[key.slice(prefix.length)] = localStorage.getItem(key)
+    }
+    setNotes(result)
+  }, [portfolioIdx])
+
+  const handleNoteUpdate = useCallback((tradeId, val) => {
+    setNotes(prev => {
+      if (val) return { ...prev, [tradeId]: val }
+      const next = { ...prev }
+      delete next[tradeId]
+      return next
+    })
+  }, [])
 
   const toggleExpanded = id =>
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
@@ -267,15 +341,21 @@ export default function TradeTable({ trades, onStrategyChange }) {
             </tr>
           </thead>
           <tbody>
-            {slice.map((trade, i) => (
-              <TradeRow
-                key={i}
-                trade={trade}
-                expanded={!!expanded[trade.strategyGroupId]}
-                onToggle={() => toggleExpanded(trade.strategyGroupId)}
-                onStrategyChange={onStrategyChange}
-              />
-            ))}
+            {slice.map((trade, i) => {
+              const noteKey = `portfolio-tracker:note:opt:${portfolioIdx}:${trade.strategyGroupId}`
+              return (
+                <TradeRow
+                  key={i}
+                  trade={trade}
+                  note={notes[trade.strategyGroupId] ?? ''}
+                  noteKey={noteKey}
+                  expanded={!!expanded[trade.strategyGroupId]}
+                  onToggle={() => toggleExpanded(trade.strategyGroupId)}
+                  onStrategyChange={onStrategyChange}
+                  onNoteUpdate={handleNoteUpdate}
+                />
+              )
+            })}
           </tbody>
         </table>
       </div>

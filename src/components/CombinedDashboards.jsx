@@ -14,6 +14,7 @@ import { computeStats, auFY } from '../utils/calculatePnL'
 import { computeEquityStats } from '../utils/buildEquityTrades'
 import StatCard from './StatCard'
 import MonthlyChart from './MonthlyChart'
+import CalendarHeatmap from './CalendarHeatmap'
 import { fmt } from '../utils/format'
 
 // ── Group definitions ────────────────────────────────────────────────────────
@@ -110,7 +111,24 @@ function buildGroupData(portfolios, brokers, names, indices, filterFY) {
   const eqPnL    = equityStats?.totalPnL ?? 0
   const totalPnL = optPnL + eqPnL
 
-  return { optionStats, equityStats, optPnL, eqPnL, totalPnL, accounts, monthlyData }
+  // ── Combined daily P&L (options + equity, merged by date) ──────────────────
+  const dailyMap = {}
+  for (const [date, entry] of Object.entries(optionStats?.dailyPnL ?? {})) {
+    if (!dailyMap[date]) dailyMap[date] = { pnl: 0, count: 0, trades: [] }
+    dailyMap[date].pnl   += entry.pnl
+    dailyMap[date].count += entry.count ?? 0
+    dailyMap[date].trades.push(...(entry.trades ?? []))
+  }
+  for (const pos of filteredClosed) {
+    if (!pos.sellDate || isNaN(pos.sellDate)) continue
+    const date = pos.sellDate.toISOString().slice(0, 10)
+    if (!dailyMap[date]) dailyMap[date] = { pnl: 0, count: 0, trades: [] }
+    dailyMap[date].pnl   += pos.pnl
+    dailyMap[date].count += 1
+    dailyMap[date].trades.push({ underlying: pos.symbol, strategy: 'Equity', pnl: pos.pnl })
+  }
+
+  return { optionStats, equityStats, optPnL, eqPnL, totalPnL, accounts, monthlyData, dailyMap }
 }
 
 // ── GroupCard ────────────────────────────────────────────────────────────────
@@ -262,6 +280,11 @@ function GroupCard({ group, portfolios, brokers, names, filterFY }) {
         {/* ── Combined monthly chart ────────────────────────────────────────── */}
         {data.monthlyData.length > 1 && (
           <MonthlyChart data={data.monthlyData} title="Combined P&L by Month" />
+        )}
+
+        {/* ── Daily P&L calendar ───────────────────────────────────────────── */}
+        {Object.keys(data.dailyMap).length > 0 && (
+          <CalendarHeatmap dailyPnL={data.dailyMap} />
         )}
 
       </div>

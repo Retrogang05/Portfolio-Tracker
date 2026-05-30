@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import FileUpload from './components/FileUpload'
 import StatCard from './components/StatCard'
 import CalendarHeatmap from './components/CalendarHeatmap'
@@ -17,6 +17,10 @@ import StockClosedTable from './components/StockClosedTable'
 import TaxCentre from './components/TaxCentre'
 import CombinedDashboards from './components/CombinedDashboards'
 import DividendReport from './components/DividendReport'
+import Collapsible from './components/Collapsible'
+import RollingPnL from './components/RollingPnL'
+import CumulativePnLChart from './components/CumulativePnLChart'
+import Journal from './components/Journal'
 import { parseAllCSV } from './utils/parseTastyworks'
 import { parseAllIBKR } from './utils/parseIBKR'
 import { parseSelfwealth } from './utils/parseSelfwealth'
@@ -27,7 +31,8 @@ import { buildTrades, computeStats, auFY } from './utils/calculatePnL'
 import { buildEquityTrades, computeEquityStats } from './utils/buildEquityTrades'
 import { parseRBA } from './utils/parseRBA'
 import { buildTaxData } from './utils/buildTaxData'
-import { savePortfolios, loadPortfolios, saveRBA, loadRBA, clearAll } from './utils/db'
+import { savePortfolios, loadPortfolios, saveRBA, loadRBA, clearAll, loadJournalEntries, saveJournalEntry, deleteJournalEntry } from './utils/db'
+import { exportBackup, importBackup } from './utils/backup'
 import { fmt } from './utils/format'
 
 // Per-portfolio broker config — index matches portfolio slot
@@ -89,6 +94,8 @@ export default function App() {
   const [showTax,       setShowTax]       = useState(false) // Tax Centre tab
   const [showCombined,  setShowCombined]  = useState(false) // Combined Overview tab
   const [showDividends, setShowDividends] = useState(false) // Dividend Income tab
+  const [showJournal,   setShowJournal]   = useState(false) // Journal tab
+  const [journalEntries, setJournalEntries] = useState([])  // all journal entries
   const [rbaRates, setRbaRates] = useState(null)  // parsed RBA rate map
   const [rbaFileName, setRbaFileName] = useState('')
   const [rbaError, setRbaError] = useState(null)
@@ -96,6 +103,8 @@ export default function App() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem('portfolio-tracker:theme') ?? 'dark'
   )
+  const [importStatus, setImportStatus] = useState(null) // { ok, message } | null
+  const importFileRef = useRef(null)
 
   const p = portfolios[active]
 
@@ -211,6 +220,70 @@ export default function App() {
 
   function handleReset() {
     updatePortfolio(active, emptyPortfolio(active))
+  }
+
+  // ── Journal handlers ─────────────────────────────────────────────────────
+  async function handleJournalSave(entry) {
+    const id = await saveJournalEntry(entry)
+    setJournalEntries(prev => {
+      const existing = prev.findIndex(e => e.id === (entry.id ?? id))
+      if (existing >= 0) {
+        const next = [...prev]
+        next[existing] = { ...entry, id: entry.id ?? id }
+        return next
+      }
+      return [...prev, { ...entry, id }]
+    })
+  }
+
+  async function handleJournalDelete(id) {
+    await deleteJournalEntry(id)
+    setJournalEntries(prev => prev.filter(e => e.id !== id))
+  }
+
+  // Map of date string → mood for calendar dots (best mood wins if multiple entries on same day)
+  const MOOD_RANK = { good: 2, neutral: 1, bad: 0 }
+  const journalDates = useMemo(() => {
+    const map = {}
+    for (const entry of journalEntries) {
+      if (!entry.date) continue
+      const cur = map[entry.date]
+      if (!cur || (MOOD_RANK[entry.mood] ?? 1) > (MOOD_RANK[cur] ?? 1)) {
+        map[entry.date] = entry.mood ?? 'neutral'
+      }
+    }
+    return map
+  }, [journalEntries])
+
+  // ── Backup: export ───────────────────────────────────────────────────────
+  async function handleExport() {
+    try {
+      await exportBackup(portfolios)
+    } catch (e) {
+      setImportStatus({ ok: false, message: `Export failed: ${e.message}` })
+    }
+  }
+
+  // ── Backup: import ───────────────────────────────────────────────────────
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''          // reset so same file can be re-selected
+    try {
+      const result = await importBackup(file)
+      const parts = [
+        `${result.overridesRestored} strategy override${result.overridesRestored !== 1 ? 's' : ''}`,
+        `${result.tagsRestored} capital tag${result.tagsRestored !== 1 ? 's' : ''}`,
+        result.rbaRestored ? 'RBA rates' : null,
+      ].filter(Boolean)
+      setImportStatus({
+        ok: true,
+        message: `Restored: ${parts.join(', ')}. Reloading…`,
+      })
+      setTimeout(() => window.location.reload(), 1800)
+    } catch (e) {
+      setImportStatus({ ok: false, message: `Import failed: ${e.message}` })
+    }
   }
 
   const broker        = PORTFOLIO_BROKER[active] ?? 'tastytrade'
@@ -331,6 +404,12 @@ export default function App() {
           setRbaRates(savedRBA.rates)
           setRbaFileName(savedRBA.fileName ?? '')
         }
+
+        // Load journal entries
+        try {
+          const entries = await loadJournalEntries()
+          setJournalEntries(entries)
+        } catch { /* non-fatal */ }
       } catch (e) {
         console.warn('IndexedDB load failed:', e)
       } finally {
@@ -373,6 +452,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
+      {/* ── Import status banner ──────────────────────────────────────────── */}
+      {importStatus && (
+        <div className={`px-6 py-2.5 flex items-center justify-between text-sm ${
+          importStatus.ok
+            ? 'bg-emerald-900/40 border-b border-emerald-700/60 text-emerald-300'
+            : 'bg-red-900/40 border-b border-red-700/60 text-red-300'
+        }`}>
+          <span>{importStatus.ok ? '✓' : '✕'} {importStatus.message}</span>
+          {!importStatus.ok && (
+            <button onClick={() => setImportStatus(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+          )}
+        </div>
+      )}
+
       <header className="border-b border-slate-700/60 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
@@ -429,11 +522,40 @@ export default function App() {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
+          {/* ── Backup controls ── */}
+          <button
+            onClick={handleExport}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded"
+            title="Download a backup of your strategy overrides, capital tags and RBA rates"
+          >
+            💾 Export
+          </button>
+
+          <button
+            onClick={() => importFileRef.current?.click()}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded"
+            title="Restore strategy overrides, capital tags and RBA rates from a backup file"
+          >
+            📂 Import
+          </button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+
           {/* Clear all saved data */}
           <button
             onClick={async () => {
-              if (!confirm('Clear all saved portfolio data and RBA rates?\n\nYou will need to re-upload your CSV files.')) return
+              if (!confirm('Clear all saved portfolio data and RBA rates?\n\nStrategy overrides and capital tags will also be removed.\nExport a backup first if you want to keep them.')) return
               await clearAll()
+              // Clear localStorage overrides + tags for all portfolios
+              for (let i = 0; i < 5; i++) {
+                localStorage.removeItem(`portfolio-tracker:strategy-overrides:${i}`)
+                localStorage.removeItem(`portfolio-tracker:capital-tags:${i}`)
+              }
               setPortfolios([
                 emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2),
                 emptyPortfolio(3), emptyPortfolio(4),
@@ -452,7 +574,7 @@ export default function App() {
 
           {/* Dividend Income button */}
           <button
-            onClick={() => { setShowDividends(v => !v); setShowTax(false); setShowCombined(false) }}
+            onClick={() => { setShowDividends(v => !v); setShowTax(false); setShowCombined(false); setShowJournal(false) }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showDividends
                 ? 'bg-emerald-700 border-emerald-600 text-white'
@@ -462,9 +584,21 @@ export default function App() {
             💰 Dividends
           </button>
 
+          {/* Journal button */}
+          <button
+            onClick={() => { setShowJournal(v => !v); setShowTax(false); setShowCombined(false); setShowDividends(false) }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+              showJournal
+                ? 'bg-amber-700 border-amber-600 text-white'
+                : 'bg-slate-800 border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            📓 Journal
+          </button>
+
           {/* Combined Overview button */}
           <button
-            onClick={() => { setShowCombined(v => !v); setShowTax(false); setShowDividends(false) }}
+            onClick={() => { setShowCombined(v => !v); setShowTax(false); setShowDividends(false); setShowJournal(false) }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showCombined
                 ? 'bg-blue-700 border-blue-600 text-white'
@@ -476,7 +610,7 @@ export default function App() {
 
           {/* Tax Centre tab button */}
           <button
-            onClick={() => { setShowTax(v => !v); setShowCombined(false); setShowDividends(false) }}
+            onClick={() => { setShowTax(v => !v); setShowCombined(false); setShowDividends(false); setShowJournal(false) }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showTax
                 ? 'bg-violet-700 border-violet-600 text-white'
@@ -486,7 +620,7 @@ export default function App() {
             🧾 Tax Centre
           </button>
 
-          {!showTax && !showCombined && !showDividends && p.fileName && (
+          {!showTax && !showCombined && !showDividends && !showJournal && p.fileName && (
             <>
               <span className="text-xs text-slate-500 truncate max-w-48">{p.fileName}</span>
               <button
@@ -502,6 +636,16 @@ export default function App() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-6 py-8 space-y-8">
+
+        {/* ── JOURNAL ─────────────────────────────────────────────── */}
+        {showJournal && (
+          <Journal
+            entries={journalEntries}
+            onSave={handleJournalSave}
+            onDelete={handleJournalDelete}
+            portfolioNames={PORTFOLIO_NAMES}
+          />
+        )}
 
         {/* ── COMBINED OVERVIEW ───────────────────────────────────── */}
         {showCombined && (
@@ -539,7 +683,7 @@ export default function App() {
           />
         )}
 
-        {!showTax && !showCombined && !showDividends && !hasData && !p.loading && (
+        {!showTax && !showCombined && !showDividends && !showJournal && !hasData && !p.loading && (
           <>
             <div className="text-center space-y-2 pt-8 pb-4">
               <h1 className="text-3xl font-bold text-slate-100">Portfolio Tracker</h1>
@@ -612,14 +756,14 @@ export default function App() {
           </>
         )}
 
-        {!showTax && !showCombined && !showDividends && p.loading && (
+        {!showTax && !showCombined && !showDividends && !showJournal && p.loading && (
           <div className="text-center py-24 text-slate-400">
             <div className="text-4xl mb-4 animate-pulse">⚙️</div>
             <p>Parsing transactions…</p>
           </div>
         )}
 
-        {!showTax && !showCombined && !showDividends && hasData && (
+        {!showTax && !showCombined && !showDividends && !showJournal && hasData && (
           <div className="flex gap-6 items-start">
 
             {/* Main content — filtered by view */}
@@ -728,18 +872,36 @@ export default function App() {
                     <StatCard label="Avg Days Held" value={`${Math.round(filteredTrades.reduce((s, t) => s + t.daysHeld, 0) / (filteredTrades.length || 1))}d`} />
                   </div>
 
-                  <YearSummary byYear={filteredStats.byYear} movements={p.moneyMovements} tags={p.capitalTags} />
+                  <RollingPnL dailyPnL={optionsDailyPnL} />
 
-                  <CalendarHeatmap dailyPnL={optionsDailyPnL} />
+                  <Collapsible title="Year Summary">
+                    <YearSummary byYear={filteredStats.byYear} movements={p.moneyMovements} tags={p.capitalTags} />
+                  </Collapsible>
 
-                  {p.wheels.length > 0 && <WheelTracker positions={p.wheels} />}
+                  <Collapsible title="Daily P&L Calendar">
+                    <CalendarHeatmap dailyPnL={optionsDailyPnL} journalDates={journalDates} />
+                  </Collapsible>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <TickerBreakdown data={filteredStats.byUnderlying} />
-                    <StrategyBreakdown data={filteredStats.byStrategy} />
-                  </div>
+                  <Collapsible title="Cumulative P&L">
+                    <CumulativePnLChart dailyPnL={optionsDailyPnL} />
+                  </Collapsible>
 
-                  <TradeTable trades={filteredTrades} onStrategyChange={handleStrategyChange} />
+                  {p.wheels.length > 0 && (
+                    <Collapsible title="Wheel & PMCC Tracker">
+                      <WheelTracker positions={p.wheels} />
+                    </Collapsible>
+                  )}
+
+                  <Collapsible title="Breakdown by Ticker & Strategy">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <TickerBreakdown data={filteredStats.byUnderlying} />
+                      <StrategyBreakdown data={filteredStats.byStrategy} />
+                    </div>
+                  </Collapsible>
+
+                  <Collapsible title="Trade History">
+                    <TradeTable trades={filteredTrades} onStrategyChange={handleStrategyChange} portfolioIdx={active} />
+                  </Collapsible>
                 </>
               )}
 
@@ -763,39 +925,59 @@ export default function App() {
                     )
                   })()}
 
+                  <RollingPnL dailyPnL={equityDailyPnL} />
+
                   {/* FY Year-to-Date — only when filtered closed trades exist */}
                   {filteredEquityData?.stats?.byYear?.length > 0 && (
-                    <YearSummary
-                      byYear={filteredEquityData.stats.byYear}
-                      subtitle="Stock closed trades · 1 Jul – 30 Jun"
-                    />
+                    <Collapsible title="Year Summary">
+                      <YearSummary
+                        byYear={filteredEquityData.stats.byYear}
+                        subtitle="Stock closed trades · 1 Jul – 30 Jun"
+                      />
+                    </Collapsible>
                   )}
 
                   {/* Stock calendar */}
                   {Object.keys(equityDailyPnL).length > 0 && (
-                    <CalendarHeatmap dailyPnL={equityDailyPnL} />
+                    <Collapsible title="Daily P&L Calendar">
+                      <CalendarHeatmap dailyPnL={equityDailyPnL} journalDates={journalDates} />
+                    </Collapsible>
+                  )}
+
+                  {/* Cumulative P&L */}
+                  {Object.keys(equityDailyPnL).length > 1 && (
+                    <Collapsible title="Cumulative P&L">
+                      <CumulativePnLChart dailyPnL={equityDailyPnL} />
+                    </Collapsible>
                   )}
 
                   {/* Open positions — always shown unfiltered (current holdings) */}
-                  <StockOpenPositions
-                    openPositions={activeEquityData.openPositions}
-                    totalOpenCost={activeEquityData.totalOpenCost}
-                  />
+                  <Collapsible title="Open Positions">
+                    <StockOpenPositions
+                      openPositions={activeEquityData.openPositions}
+                      totalOpenCost={activeEquityData.totalOpenCost}
+                    />
+                  </Collapsible>
 
                   {/* Closed positions — filtered by selected FY */}
                   {(filteredEquityData?.closedPositions?.length ?? 0) > 0 && (
-                    <StockClosedTable
-                      closedPositions={filteredEquityData.closedPositions}
-                      totalRealizedPnL={filteredEquityData.totalRealizedPnL}
-                    />
+                    <Collapsible title="Closed Positions">
+                      <StockClosedTable
+                        closedPositions={filteredEquityData.closedPositions}
+                        totalRealizedPnL={filteredEquityData.totalRealizedPnL}
+                        portfolioIdx={active}
+                      />
+                    </Collapsible>
                   )}
 
                   {p.moneyMovements.length > 0 && (
-                    <CapitalMovements
-                      movements={p.moneyMovements}
-                      tags={p.capitalTags}
-                      onTagChange={handleCapitalTagChange}
-                    />
+                    <Collapsible title="Capital Movements">
+                      <CapitalMovements
+                        movements={p.moneyMovements}
+                        tags={p.capitalTags}
+                        onTagChange={handleCapitalTagChange}
+                      />
+                    </Collapsible>
                   )}
                 </>
               )}

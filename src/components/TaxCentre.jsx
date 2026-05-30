@@ -145,6 +145,12 @@ export default function TaxCentre({
   const [sortKey,         setSortKey]         = useState('sellDate')
   const [sortDir,         setSortDir]         = useState(-1)
   const [page,            setPage]            = useState(0)
+  const [showRBAUpdate,   setShowRBAUpdate]   = useState(false)
+
+  function handleRBAFile(file) {
+    onRBAFile(file)
+    setShowRBAUpdate(false)
+  }
 
   const noPortfolioData = portfolios.every(p =>
     !p.equityData && !p.equityDataAUS && !p.equityDataUS && !p.trades?.length
@@ -218,10 +224,19 @@ export default function TaxCentre({
         {/* RBA status badge */}
         <div className="flex items-center gap-2">
           {rbaRates ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-sm">
-              <span>✓</span>
-              <span className="font-medium">RBA rates loaded</span>
-              {rbaFileName && <span className="text-emerald-600 text-xs truncate max-w-32">{rbaFileName}</span>}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-900/30 border border-emerald-700/50 text-emerald-300 text-sm">
+                <span>✓</span>
+                <span className="font-medium">RBA rates loaded</span>
+                {rbaFileName && <span className="text-emerald-600 text-xs truncate max-w-32">{rbaFileName}</span>}
+              </div>
+              <button
+                onClick={() => setShowRBAUpdate(v => !v)}
+                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 text-slate-300 text-sm transition-colors"
+                title="Upload a new RBA exchange rate file"
+              >
+                🔄 Update RBA
+              </button>
             </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-900/30 border border-amber-700/50 text-amber-300 text-sm">
@@ -232,10 +247,10 @@ export default function TaxCentre({
         </div>
       </div>
 
-      {/* RBA upload — shown until file is loaded */}
-      {!rbaRates && (
+      {/* RBA upload — shown when not yet loaded, or when user clicks Update RBA */}
+      {(!rbaRates || showRBAUpdate) && (
         <div className="space-y-3">
-          <RBAUpload onFile={onRBAFile} error={rbaError} />
+          <RBAUpload onFile={handleRBAFile} error={rbaError} />
           <p className="text-xs text-slate-600 text-center">
             The RBA F11.1 file is needed to convert USD transactions to AUD at the correct historical rate.
           </p>
