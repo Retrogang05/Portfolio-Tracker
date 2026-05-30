@@ -33,8 +33,8 @@ import { fmt } from './utils/format'
 // Per-portfolio broker config — index matches portfolio slot
 const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec']
 
-function overridesKey(idx)   { return `options-tracker:strategy-overrides:${idx}` }
-function capitalTagsKey(idx) { return `options-tracker:capital-tags:${idx}` }
+function overridesKey(idx)   { return `portfolio-tracker:strategy-overrides:${idx}` }
+function capitalTagsKey(idx) { return `portfolio-tracker:capital-tags:${idx}` }
 
 function loadOverrides(idx)  {
   try { return JSON.parse(localStorage.getItem(overridesKey(idx))   || '{}') } catch { return {} }
@@ -94,7 +94,7 @@ export default function App() {
   const [rbaError, setRbaError] = useState(null)
   const [dbReady, setDbReady] = useState(false)   // true once IndexedDB initial load is done
   const [theme, setTheme] = useState(
-    () => localStorage.getItem('options-tracker:theme') ?? 'dark'
+    () => localStorage.getItem('portfolio-tracker:theme') ?? 'dark'
   )
 
   const p = portfolios[active]
@@ -356,7 +356,7 @@ export default function App() {
   // ── Theme: sync .light class on <html> and persist choice ────────────────
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light')
-    localStorage.setItem('options-tracker:theme', theme)
+    localStorage.setItem('portfolio-tracker:theme', theme)
   }, [theme])
 
   // Brief full-screen loader while IndexedDB hydrates (typically < 100 ms)
