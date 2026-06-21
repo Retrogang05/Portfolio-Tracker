@@ -25,6 +25,8 @@ import { parseAllCSV } from './utils/parseTastyworks'
 import { parseAllIBKR } from './utils/parseIBKR'
 import { parseSelfwealth } from './utils/parseSelfwealth'
 import { parseComsec } from './utils/parseComsec'
+import { parseAllTradestation } from './utils/parseTradestation'
+import { parseAllTradezero } from './utils/parseTradezero'
 import { tagRowsWithStrategy } from './utils/identifyStrategy'
 import { detectWheels } from './utils/detectWheel'
 import { buildTrades, computeStats, auFY } from './utils/calculatePnL'
@@ -36,7 +38,7 @@ import { exportBackup, importBackup } from './utils/backup'
 import { fmt } from './utils/format'
 
 // Per-portfolio broker config — index matches portfolio slot
-const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec']
+const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec', 'tradestation', 'tradezero']
 
 function overridesKey(idx)   { return `portfolio-tracker:strategy-overrides:${idx}` }
 function capitalTagsKey(idx) { return `portfolio-tracker:capital-tags:${idx}` }
@@ -62,7 +64,7 @@ function applyOverrides(trades, overrides) {
   })
 }
 
-const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC']
+const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ']
 
 function emptyPortfolio(idx) {
   return {
@@ -85,7 +87,7 @@ function emptyPortfolio(idx) {
 
 export default function App() {
   const [portfolios, setPortfolios] = useState([
-    emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2), emptyPortfolio(3), emptyPortfolio(4),
+    emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2), emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6),
   ])
   const [active, setActive] = useState(0)
   const [view, setView] = useState('options')     // 'options' | 'stocks'
@@ -132,9 +134,10 @@ export default function App() {
         allRows = await parseComsec(files[0])
       } else {
         const file = files[0]
-        allRows = broker === 'ibkr'
-          ? await parseAllIBKR(file)
-          : await parseAllCSV(file)
+        if (broker === 'ibkr') allRows = await parseAllIBKR(file)
+        else if (broker === 'tradestation') allRows = await parseAllTradestation(file)
+        else if (broker === 'tradezero') allRows = await parseAllTradezero(file)
+        else allRows = await parseAllCSV(file)
       }
 
       // Equity / share portfolio — always built for every broker
@@ -503,6 +506,12 @@ export default function App() {
                   {pfBroker === 'comsec' && (
                     <span className="ml-1 text-xs text-slate-600">CS</span>
                   )}
+                  {pfBroker === 'tradestation' && (
+                    <span className="ml-1 text-xs text-slate-600">TS</span>
+                  )}
+                  {pfBroker === 'tradezero' && (
+                    <span className="ml-1 text-xs text-slate-600">TZ</span>
+                  )}
                   {pf.stats && (
                     <span className="ml-1.5 text-xs text-slate-500">· {fmt(pf.stats.totalPnL)}</span>
                   )}
@@ -552,13 +561,13 @@ export default function App() {
               if (!confirm('Clear all saved portfolio data and RBA rates?\n\nStrategy overrides and capital tags will also be removed.\nExport a backup first if you want to keep them.')) return
               await clearAll()
               // Clear localStorage overrides + tags for all portfolios
-              for (let i = 0; i < 5; i++) {
+              for (let i = 0; i < 7; i++) {
                 localStorage.removeItem(`portfolio-tracker:strategy-overrides:${i}`)
                 localStorage.removeItem(`portfolio-tracker:capital-tags:${i}`)
               }
               setPortfolios([
                 emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2),
-                emptyPortfolio(3), emptyPortfolio(4),
+                emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6),
               ])
               setRbaRates(null)
               setRbaFileName('')
@@ -688,10 +697,12 @@ export default function App() {
             <div className="text-center space-y-2 pt-8 pb-4">
               <h1 className="text-3xl font-bold text-slate-100">Portfolio Tracker</h1>
               <p className="text-slate-400">
-                {broker === 'ibkr'        ? 'Upload your Interactive Brokers Transaction History CSV'
-                : broker === 'selfwealth' ? 'Upload your Selfwealth Cash Report CSV(s)'
-                : broker === 'comsec'     ? 'Upload your CommSec Account Transactions CSV'
-                :                          'Upload your Tastytrade transaction history CSV'}
+                {broker === 'ibkr'          ? 'Upload your Interactive Brokers Transaction History CSV'
+                : broker === 'selfwealth'   ? 'Upload your Selfwealth Cash Report CSV(s)'
+                : broker === 'comsec'       ? 'Upload your CommSec Account Transactions CSV'
+                : broker === 'tradestation' ? 'Upload your Tradestation Transaction History CSV'
+                : broker === 'tradezero'    ? 'Upload your TradeZero Trade History CSV'
+                :                            'Upload your Tastytrade transaction history CSV'}
               </p>
               <p className="text-slate-500 text-sm">
                 Loading into <span className="text-slate-300 font-medium">{p.name}</span>
@@ -750,6 +761,32 @@ export default function App() {
                 </ol>
                 <p className="text-slate-500 text-xs pt-1">
                   💡 All amounts are AUD · Brokerage is already reflected in the Debit/Credit columns
+                </p>
+              </div>
+            )}
+            {broker === 'tradezero' && (
+              <div className="bg-slate-800/50 rounded-xl p-5 text-sm text-slate-400 space-y-2">
+                <p className="font-medium text-slate-300">How to export from TradeZero:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Log in to TradeZero → go to <strong className="text-slate-300">Account</strong></li>
+                  <li>Select <strong className="text-slate-300">Trade History</strong></li>
+                  <li>Set your date range and click <strong className="text-slate-300">Export</strong> → CSV</li>
+                </ol>
+                <p className="text-slate-500 text-xs pt-1">
+                  💡 Supports long stocks, short selling, and options · Open/Close is inferred automatically
+                </p>
+              </div>
+            )}
+            {broker === 'tradestation' && (
+              <div className="bg-slate-800/50 rounded-xl p-5 text-sm text-slate-400 space-y-2">
+                <p className="font-medium text-slate-300">How to export from Tradestation:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Log in to Tradestation → go to <strong className="text-slate-300">Account</strong></li>
+                  <li>Select <strong className="text-slate-300">History</strong> or <strong className="text-slate-300">Transaction History</strong></li>
+                  <li>Set your date range and click <strong className="text-slate-300">Export</strong> → CSV</li>
+                </ol>
+                <p className="text-slate-500 text-xs pt-1">
+                  💡 Supports options trades · Open/Close is inferred automatically from trade order
                 </p>
               </div>
             )}

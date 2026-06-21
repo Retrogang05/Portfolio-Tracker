@@ -21,6 +21,16 @@ const BROKER_CONFIG = {
     hint:  'CommSec → Portfolio → Transactions → Download Transactions → CSV',
     multi: false,
   },
+  tradestation: {
+    title: 'Add Tradestation Transactions',
+    hint:  'Tradestation → Account → History → Export CSV',
+    multi: false,
+  },
+  tradezero: {
+    title: 'Add TradeZero Trade History',
+    hint:  'TradeZero → Account → Trade History → Export CSV',
+    multi: false,
+  },
 }
 
 export default function FileUpload({ onFile, broker = 'tastytrade' }) {

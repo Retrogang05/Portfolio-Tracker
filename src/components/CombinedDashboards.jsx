@@ -20,15 +20,17 @@ import { fmt } from '../utils/format'
 // ── Group definitions ────────────────────────────────────────────────────────
 
 const GROUPS = [
-  { label: 'Divya Portfolios', indices: [0, 2, 4], accent: 'violet' },
-  { label: 'SAHR Portfolios',  indices: [1, 3],    accent: 'blue'   },
+  { label: 'Divya Portfolios', indices: [0, 2, 4, 5, 6], accent: 'violet' },
+  { label: 'SAHR Portfolios',  indices: [1, 3],           accent: 'blue'   },
 ]
 
 const BROKER_BADGE = {
-  tastytrade: 'TT',
-  ibkr:       'IB',
-  selfwealth: 'SW',
-  comsec:     'CS',
+  tastytrade:   'TT',
+  ibkr:         'IB',
+  selfwealth:   'SW',
+  comsec:       'CS',
+  tradestation: 'TS',
+  tradezero:    'TZ',
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

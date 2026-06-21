@@ -71,11 +71,9 @@ function parseComment(comment) {
  * Parse a single Selfwealth Cash Report CSV file.
  * Returns an array of normalised rows (same shape as parseTastyworks / parseIBKR).
  */
-export function parseSelfwealth(file) {
-  const currency = detectCurrency(file.name)
-
+function _parseSelfwealth(source, currency) {
   return new Promise((resolve, reject) => {
-    Papa.parse(file, {
+    Papa.parse(source, {
       header: true,
       skipEmptyLines: true,
       // Strip "* Please note, this is not a bank statement." from Balance header
@@ -202,4 +200,13 @@ export function parseSelfwealth(file) {
       error: reject,
     })
   })
+}
+
+// For testing: accepts a raw CSV string + explicit currency instead of a File object
+export function parseCSVText(csvText, currency = 'USD') {
+  return _parseSelfwealth(csvText, currency)
+}
+
+export function parseSelfwealth(file) {
+  return _parseSelfwealth(file, detectCurrency(file.name))
 }

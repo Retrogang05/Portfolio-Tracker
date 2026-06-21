@@ -176,6 +176,61 @@ function inferOpenClose(tradeRows) {
   }
 }
 
+// IBKR exports don't always include expiration rows. For any option position
+// still open past its expiry date, synthesise a worthless-expiration close.
+function addSyntheticExpirations(rows) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const optionTrades = rows.filter(r => r.rowType === 'Trade' && r.callPut)
+
+  // Track net signed qty per contract key
+  const net = {}
+  const openRows = {}
+
+  const sorted = [...optionTrades].sort((a, b) => a.date - b.date)
+  for (const r of sorted) {
+    const k = `${r.underlying}|${r.expiration}|${r.strike}|${r.callPut}`
+    if (net[k] === undefined) net[k] = 0
+    const signed = r.openClose === 'Open'
+      ? (r.action.startsWith('BUY') ? r.quantity : -r.quantity)
+      : (r.action.startsWith('BUY') ? r.quantity : -r.quantity)
+    net[k] += signed
+    if (r.openClose === 'Open') openRows[k] = r
+  }
+
+  const synthetic = []
+  for (const [k, remaining] of Object.entries(net)) {
+    if (Math.abs(remaining) < 0.0001) continue
+    const proto = openRows[k]
+    if (!proto) continue
+    // IBKR expiration strings are "M/D/YY" — parse carefully
+    const expDate = new Date(proto.expiration)
+    if (isNaN(expDate) || expDate >= today) continue
+
+    const expCloseDate = new Date(expDate)
+    expCloseDate.setHours(16, 0, 0, 0)
+
+    synthetic.push({
+      ...proto,
+      rowType:      'Expiration',
+      date:         expCloseDate,
+      timestampSec: Math.floor(expCloseDate.getTime() / 1000).toString(),
+      orderId:      '',
+      quantity:     Math.abs(remaining),
+      openClose:    'Close',
+      action:       remaining > 0 ? 'SELL_TO_CLOSE' : 'BUY_TO_CLOSE',
+      price:        0,
+      amount:       0,
+      commissions:  0,
+      fees:         0,
+      isExpiration: true,
+    })
+  }
+
+  return [...rows, ...synthetic]
+}
+
 export function parseAllIBKR(file) {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
@@ -214,7 +269,7 @@ export function parseAllIBKR(file) {
           // Strip internal field
           consolidated.forEach(r => { delete r._signedQty })
 
-          resolve(consolidated)
+          resolve(addSyntheticExpirations(consolidated))
         } catch (e) {
           reject(e)
         }
