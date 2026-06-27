@@ -1,5 +1,8 @@
-// Australian financial year helper — exported so components can group by FY consistently
+// Australian financial year: 1 Jul – 30 Jun. FY2026 = Jul 2025 – Jun 2026.
 export const auFY = d => (d.getMonth() >= 6 ? d.getFullYear() + 1 : d.getFullYear()).toString()
+
+// Indian financial year: 1 Apr – 31 Mar. FY2026 = Apr 2025 – Mar 2026.
+export const inFY = d => (d.getMonth() >= 3 ? d.getFullYear() + 1 : d.getFullYear()).toString()
 
 // Match opening and closing trades, compute realized P&L, and group into strategies.
 //

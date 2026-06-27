@@ -61,12 +61,12 @@ function mapRow(r, idx) {
     }
   }
 
-  // ── Assignment (equity delivery via option) ──────────────────────────────────
-  if (txType === 'Assignment') {
+  // ── Assignment / Exercise (equity delivery via option) ───────────────────────
+  if (txType === 'Assignment' || txType === 'Exercise') {
     return {
-      rowType: 'Assignment',
-      date, timestampSec: ts, orderId: `IBKR-asgn-${idx}`,
-      subType: 'Assignment',
+      rowType: txType,
+      date, timestampSec: ts, orderId: `IBKR-${txType.toLowerCase()}-${idx}`,
+      subType: txType,
       action: qty < 0 ? 'SELL_TO_CLOSE' : 'BUY_TO_OPEN',
       symbol, underlying: symbol,
       instrumentType: 'Equity',

@@ -9,11 +9,12 @@ function isEquityRow(r) {
   return (
     (r.rowType === 'Trade' && r.instrumentType === 'Equity') ||
     r.rowType === 'Assignment' ||
+    r.rowType === 'Exercise' ||
     r.rowType === 'EquityDelivery'
   )
 }
 
-export function computeEquityStats(positions) {
+export function computeEquityStats(positions, fyFn = auFY) {
   if (!positions.length) return null
 
   const wins   = positions.filter(p => p.pnl > 0)
@@ -21,7 +22,7 @@ export function computeEquityStats(positions) {
 
   const byYearMap = {}
   for (const pos of positions) {
-    const year = auFY(pos.sellDate)
+    const year = fyFn(pos.sellDate)
     if (!byYearMap[year]) byYearMap[year] = { pnl: 0, count: 0, wins: 0, losses: 0, months: {} }
     byYearMap[year].pnl    += pos.pnl
     byYearMap[year].count  += 1
@@ -36,7 +37,7 @@ export function computeEquityStats(positions) {
 
   const byYear = Object.entries(byYearMap)
     .map(([year, v]) => {
-      const yp = positions.filter(p => auFY(p.sellDate) === year)
+      const yp = positions.filter(p => fyFn(p.sellDate) === year)
       const yw = yp.filter(p => p.pnl > 0)
       const yl = yp.filter(p => p.pnl <= 0)
       const monthList = Object.entries(v.months)

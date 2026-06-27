@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmt } from '../utils/format'
+import { fmt, fmtINR } from '../utils/format'
 
 const PAGE = 15
 
@@ -13,7 +13,8 @@ function fmtPrice(n) {
   return `$${n.toFixed(2)}`
 }
 
-export default function StockOpenPositions({ openPositions = [], totalOpenCost = 0 }) {
+export default function StockOpenPositions({ openPositions = [], totalOpenCost = 0, currency = 'USD' }) {
+  const fmtAmt = currency === 'INR' ? fmtINR : fmt
   const [page, setPage] = useState(0)
 
   if (!openPositions.length) return null
@@ -30,7 +31,7 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
         </div>
         <div className="text-right">
           <p className="text-xs text-slate-500">Total Invested (cost)</p>
-          <p className="text-slate-200 font-bold text-lg">{fmt(totalOpenCost)}</p>
+          <p className="text-slate-200 font-bold text-lg">{fmtAmt(totalOpenCost)}</p>
         </div>
       </div>
 
@@ -52,7 +53,7 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
                 <td className="px-3 py-2.5 font-mono font-semibold text-slate-200">{pos.symbol}</td>
                 <td className="px-3 py-2.5 text-right text-slate-300">{pos.quantity.toLocaleString()}</td>
                 <td className="px-3 py-2.5 text-right text-slate-300">{fmtPrice(pos.avgCost)}</td>
-                <td className="px-3 py-2.5 text-right font-semibold text-slate-200">{fmt(pos.totalCost)}</td>
+                <td className="px-3 py-2.5 text-right font-semibold text-slate-200">{fmtAmt(pos.totalCost)}</td>
                 <td className="px-3 py-2.5 text-slate-400 text-xs">{fmtDate(pos.earliestBuy)}</td>
                 <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{pos.lots.length}</td>
               </tr>
