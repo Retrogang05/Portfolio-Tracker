@@ -21,7 +21,8 @@ import { fmt } from '../utils/format'
 
 const GROUPS = [
   { label: 'Divya Portfolios', indices: [0, 2, 4, 5, 6], accent: 'violet' },
-  { label: 'SAHR Portfolios',  indices: [1, 3, 7],        accent: 'blue'   },
+  { label: 'SAHR Portfolios',  indices: [1, 3],           accent: 'blue'   },
+  { label: 'Sharan Portfolios', indices: [7],             accent: 'teal'   },
 ]
 
 const BROKER_BADGE = {
@@ -145,6 +146,11 @@ const ACCENT = {
     heading:   'text-blue-400',
     badge:     'bg-blue-900/40 text-blue-300 border-blue-700/50',
     activeFY:  'bg-blue-600 text-white',
+  },
+  teal: {
+    heading:   'text-teal-400',
+    badge:     'bg-teal-900/40 text-teal-300 border-teal-700/50',
+    activeFY:  'bg-teal-600 text-white',
   },
 }
 
@@ -353,7 +359,7 @@ export default function CombinedDashboards({ portfolios, portfolioBrokers, portf
       </div>
 
       {/* ── Two group cards ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {GROUPS.map(group => (
           <GroupCard
             key={group.label}
