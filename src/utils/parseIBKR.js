@@ -121,8 +121,9 @@ function consolidatePartialFills(rows) {
   // Group by date + symbol + openClose direction
   const groups = new Map()
   for (const row of tradeRows) {
-    const dateStr = row.date.toISOString().slice(0, 10)
-    const key = `${dateStr}|${row.symbol}|${row.openClose}`
+    const dateStr  = row.date.toISOString().slice(0, 10)
+    const dir      = (row._signedQty ?? 0) >= 0 ? 'buy' : 'sell'
+    const key = `${dateStr}|${row.symbol}|${dir}`
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(row)
   }
