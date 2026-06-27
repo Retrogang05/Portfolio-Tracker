@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fmt } from '../utils/format'
+import * as XLSX from 'xlsx'
+import { fmt, fmtINR } from '../utils/format'
 
 function fmtDate(d) {
   if (!d || isNaN(d)) return '—'
@@ -51,7 +52,8 @@ function NoteRow({ colSpan, noteKey, initialValue, onSaved }) {
   )
 }
 
-export default function StockClosedTable({ closedPositions = [], totalRealizedPnL = 0, portfolioIdx = 0 }) {
+export default function StockClosedTable({ closedPositions = [], totalRealizedPnL = 0, portfolioIdx = 0, currency = 'USD' }) {
+  const fmtAmt = currency === 'INR' ? fmtINR : fmt
   const [page, setPage]         = useState(0)
   const [sortKey, setSortKey]   = useState('sellDate')
   const [sortDir, setSortDir]   = useState(-1)
@@ -78,6 +80,38 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
     })
     setNoteOpenKey(null)
   }, [])
+
+  function exportToExcel() {
+    const currencyLabel = currency === 'INR' ? 'INR (₹)' : currency === 'AUD' ? 'AUD ($)' : 'USD ($)'
+    const rows = closedPositions.map(p => ({
+      Symbol:           p.symbol,
+      Quantity:         p.quantity,
+      'Buy Date':       p.buyDate  ? p.buyDate.toLocaleDateString('en-AU')  : '',
+      'Sell Date':      p.sellDate ? p.sellDate.toLocaleDateString('en-AU') : '',
+      'Days Held':      p.daysHeld,
+      'Buy Price':      p.buyPrice,
+      'Sell Price':     p.sellPrice,
+      [`Cost Basis (${currencyLabel})`]:    p.costBasis,
+      [`Sale Proceeds (${currencyLabel})`]: p.saleProceeds,
+      [`Buy Fees (${currencyLabel})`]:      p.buyFees,
+      [`Sell Fees (${currencyLabel})`]:     p.sellFees,
+      [`Total Fees (${currencyLabel})`]:    p.totalFees,
+      [`Net P&L (${currencyLabel})`]:       parseFloat(p.pnl.toFixed(2)),
+      'Win/Loss':       p.pnl >= 0 ? 'Win' : 'Loss',
+      ...(currency === 'INR' && p._inrRate ? { 'USD/INR Rate': p._inrRate } : {}),
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    // Auto-width columns
+    const colWidths = Object.keys(rows[0] ?? {}).map(k =>
+      Math.max(k.length, ...rows.map(r => String(r[k] ?? '').length)) + 2
+    )
+    ws['!cols'] = colWidths.map(w => ({ wch: w }))
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Closed Positions')
+    XLSX.writeFile(wb, `closed_positions_${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
 
   if (!closedPositions.length) return null
 
@@ -128,27 +162,34 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
             value={filter}
             onChange={e => { setFilter(e.target.value); setPage(0) }}
           />
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-800/60 hover:bg-emerald-700/70 border border-emerald-700/60 text-emerald-300 text-sm font-medium transition-colors"
+            title="Download all closed positions as Excel file"
+          >
+            ↓ Excel
+          </button>
         <div className="flex gap-4 text-right">
           <div>
             <p className="text-xs text-slate-500">Total Cost Basis</p>
-            <p className="text-slate-300 font-semibold">{fmt(totalCost)}</p>
+            <p className="text-slate-300 font-semibold">{fmtAmt(totalCost)}</p>
             <p className="text-xs text-slate-600">excl. fees</p>
           </div>
           <div>
             <p className="text-xs text-slate-500">Total Proceeds</p>
-            <p className="text-slate-300 font-semibold">{fmt(totalProceeds)}</p>
+            <p className="text-slate-300 font-semibold">{fmtAmt(totalProceeds)}</p>
             <p className="text-xs text-slate-600">excl. fees</p>
           </div>
           {totalFees > 0.01 && (
             <div>
               <p className="text-xs text-slate-500">Total Fees</p>
-              <p className="text-orange-400 font-semibold">-{fmt(totalFees)}</p>
+              <p className="text-orange-400 font-semibold">-{fmtAmt(totalFees)}</p>
             </div>
           )}
           <div>
             <p className="text-xs text-slate-500">Net P&amp;L</p>
             <p className={`font-bold text-lg ${filteredPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {fmt(filteredPnL)}
+              {fmtAmt(filteredPnL)}
             </p>
             {filter && filteredPositions.length !== closedPositions.length && (
               <p className="text-xs text-slate-600">filtered</p>
@@ -202,7 +243,7 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <span className={`font-bold text-sm ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {fmt(t.pnl)}
+                          {fmtAmt(t.pnl)}
                         </span>
                         <button
                           onClick={() => setNoteOpenKey(noteOpenKey === nKey ? null : nKey)}

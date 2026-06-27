@@ -29,9 +29,10 @@ import { parseAllTradestation } from './utils/parseTradestation'
 import { parseAllTradezero } from './utils/parseTradezero'
 import { tagRowsWithStrategy } from './utils/identifyStrategy'
 import { detectWheels } from './utils/detectWheel'
-import { buildTrades, computeStats, auFY } from './utils/calculatePnL'
+import { buildTrades, computeStats, auFY, inFY } from './utils/calculatePnL'
 import { buildEquityTrades, computeEquityStats } from './utils/buildEquityTrades'
 import { parseRBA } from './utils/parseRBA'
+import { convertEquityDataToINR } from './utils/convertToINR'
 import { buildTaxData } from './utils/buildTaxData'
 import { savePortfolios, loadPortfolios, saveRBA, loadRBA, clearAll, loadJournalEntries, saveJournalEntry, deleteJournalEntry } from './utils/db'
 import { exportBackup, importBackup } from './utils/backup'
@@ -292,62 +293,67 @@ export default function App() {
   const broker        = PORTFOLIO_BROKER[active] ?? 'tastytrade'
   const isSelfwealth  = broker === 'selfwealth'
   const isComsec      = broker === 'comsec'
-  const isEquityOnly  = isSelfwealth || isComsec  // no options toggle, always show stocks view
+  const isEquityOnly  = isSelfwealth || isComsec || isSharan  // no options toggle, always show stocks view
 
   // For Selfwealth, pick the right market's equity data; CommSec/others use shared equityData
   const activeEquityData = isSelfwealth
     ? (swMarket === 'aus' ? p.equityDataAUS : p.equityDataUS) ?? null
     : p.equityData
 
-  const activeCurrency = isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
+  const isSharan       = active === 7
+  const activeCurrency = isSharan ? 'INR' : isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
+  const activeEquityDataDisplay = isSharan ? convertEquityDataToINR(activeEquityData) : activeEquityData
 
   const hasData = p.stats ||
-    (activeEquityData && (activeEquityData.openPositions.length > 0 || activeEquityData.closedPositions.length > 0)) ||
+    (activeEquityData && (activeEquityData.openPositions.length > 0 || activeEquityData.closedPositions.length > 0 )) ||
     (isSelfwealth && (p.equityDataAUS || p.equityDataUS)) ||
-    (isComsec && p.equityData)
+    (isComsec && p.equityData) ||
+    (isSharan && p.equityData)
+
+  // ── FY helper — Indian FY (Apr–Mar) for Sharan, Australian (Jul–Jun) for all others
+  const fyFn = isSharan ? inFY : auFY
 
   // ── FY filter ─────────────────────────────────────────────────────────────
-  // Collect every FY that appears across options closes AND equity closes
   const availableFYs = useMemo(() => {
     const fys = new Set()
     for (const t of p.trades) {
-      if (t.closeDate) fys.add(auFY(t.closeDate))
+      if (t.closeDate) fys.add(fyFn(t.closeDate))
     }
     for (const pos of [
       ...(p.equityData?.closedPositions    ?? []),
       ...(p.equityDataAUS?.closedPositions ?? []),
       ...(p.equityDataUS?.closedPositions  ?? []),
     ]) {
-      if (pos.sellDate) fys.add(auFY(pos.sellDate))
+      if (pos.sellDate) fys.add(fyFn(pos.sellDate))
     }
     return Array.from(fys).sort()
-  }, [p.trades, p.equityData, p.equityDataAUS, p.equityDataUS])
+  }, [p.trades, p.equityData, p.equityDataAUS, p.equityDataUS, fyFn])
 
   // Filtered options trades + recomputed stats
   const filteredTrades = useMemo(() => {
     if (filterFY === 'all') return p.trades
-    return p.trades.filter(t => t.closeDate && auFY(t.closeDate) === filterFY)
-  }, [p.trades, filterFY])
+    return p.trades.filter(t => t.closeDate && fyFn(t.closeDate) === filterFY)
+  }, [p.trades, filterFY, fyFn])
 
   const filteredStats = useMemo(() => {
     if (filterFY === 'all') return p.stats
-    return computeStats(filteredTrades)   // returns null when empty — safe
+    return computeStats(filteredTrades)
   }, [filteredTrades, filterFY, p.stats])
 
   // Filtered equity data — open positions always shown in full, closed positions filtered
   const filteredEquityData = useMemo(() => {
-    if (!activeEquityData) return null
-    if (filterFY === 'all') return activeEquityData
-    const closed = activeEquityData.closedPositions.filter(
-      pos => pos.sellDate && auFY(pos.sellDate) === filterFY
+    if (!activeEquityDataDisplay) return null
+    if (filterFY === 'all') return activeEquityDataDisplay
+    const closed = activeEquityDataDisplay.closedPositions.filter(
+      pos => pos.sellDate && fyFn(pos.sellDate) === filterFY
     )
     return {
-      ...activeEquityData,
+      ...activeEquityDataDisplay,
       closedPositions:  closed,
-      stats:            computeEquityStats(closed),   // null when empty — safe
+      stats:            computeEquityStats(closed, fyFn),
       totalRealizedPnL: closed.reduce((s, pos) => s + pos.pnl, 0),
     }
-  }, [activeEquityData, filterFY])
+  }, [activeEquityDataDisplay, filterFY, fyFn])
 
   // Options-only daily P&L (for calendar in Options view)
   const optionsDailyPnL = filteredStats?.dailyPnL ?? {}
@@ -511,6 +517,9 @@ export default function App() {
                   )}
                   {pfBroker === 'tradezero' && (
                     <span className="ml-1 text-xs text-slate-600">TZ</span>
+                  )}
+                  {i === 7 && (
+                    <span className="ml-1 text-xs text-teal-600">₹</span>
                   )}
                   {pf.stats && (
                     <span className="ml-1.5 text-xs text-slate-500">· {fmt(pf.stats.totalPnL)}</span>
@@ -864,7 +873,7 @@ export default function App() {
                 {/* FY filter pills — pushed to the right */}
                 {availableFYs.length > 1 && (
                   <div className="flex items-center gap-2 ml-auto flex-wrap">
-                    <span className="text-xs text-slate-500 shrink-0">Financial year:</span>
+                    <span className="text-xs text-slate-500 shrink-0">{isSharan ? 'Indian FY:' : 'Financial year:'}</span>
                     <div className="flex items-center gap-1 flex-wrap">
                       <button
                         onClick={() => setFilterFY('all')}
@@ -943,7 +952,7 @@ export default function App() {
               )}
 
               {/* ── STOCKS VIEW ──────────────────────────────────────────── */}
-              {view === 'stocks' && activeEquityData && (
+              {view === 'stocks' && activeEquityDataDisplay && (
                 <>
                   {/* Stat tiles — driven by filtered closed positions; show dashes when none */}
                   {(() => {
@@ -969,7 +978,7 @@ export default function App() {
                     <Collapsible title="Year Summary">
                       <YearSummary
                         byYear={filteredEquityData.stats.byYear}
-                        subtitle="Stock closed trades · 1 Jul – 30 Jun"
+                        subtitle={isSharan ? 'Stock closed trades · 1 Apr – 31 Mar' : 'Stock closed trades · 1 Jul – 30 Jun'}
                       />
                     </Collapsible>
                   )}
@@ -991,8 +1000,9 @@ export default function App() {
                   {/* Open positions — always shown unfiltered (current holdings) */}
                   <Collapsible title="Open Positions">
                     <StockOpenPositions
-                      openPositions={activeEquityData.openPositions}
-                      totalOpenCost={activeEquityData.totalOpenCost}
+                      openPositions={activeEquityDataDisplay.openPositions}
+                      totalOpenCost={activeEquityDataDisplay.totalOpenCost}
+                      currency={activeCurrency ?? 'USD'}
                     />
                   </Collapsible>
 
@@ -1003,6 +1013,7 @@ export default function App() {
                         closedPositions={filteredEquityData.closedPositions}
                         totalRealizedPnL={filteredEquityData.totalRealizedPnL}
                         portfolioIdx={active}
+                        currency={activeCurrency ?? 'USD'}
                       />
                     </Collapsible>
                   )}
@@ -1020,7 +1031,7 @@ export default function App() {
               )}
 
               {/* No equity data for this market */}
-              {view === 'stocks' && !activeEquityData && (
+              {view === 'stocks' && !activeEquityDataDisplay && (
                 <div className="text-center py-24 text-slate-500">
                   <p className="text-4xl mb-4">📦</p>
                   <p>
