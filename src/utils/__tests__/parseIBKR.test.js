@@ -5,7 +5,7 @@ import { parseAllIBKR } from '../parseIBKR.js'
 // IBKR CSV is a multi-section file — hard to write inline fixtures meaningfully.
 // These tests use the real export file.
 
-const REAL_IBKR_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/U24130472.TRANSACTIONS.YTD.csv'
+const REAL_IBKR_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/U24130472.TRANSACTIONS.1Y (1).csv'
 
 describe('parseIBKR (real file)', () => {
 
