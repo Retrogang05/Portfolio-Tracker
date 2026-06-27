@@ -80,8 +80,10 @@ export function buildEquityTrades(allRows) {
     .filter(r => r.amount !== 0 && r.quantity > 0)
     .sort((a, b) => a.date - b.date)
 
-  const opens  = equityRows.filter(r => r.amount < 0)  // paid → acquired shares
-  const closes = equityRows.filter(r => r.amount > 0)  // received → sold/delivered shares
+  // Use openClose when available (supports short selling where amount signs are reversed).
+  // Fall back to amount sign for legacy rows without openClose.
+  const opens  = equityRows.filter(r => r.openClose != null ? r.openClose === 'Open'  : r.amount < 0)
+  const closes = equityRows.filter(r => r.openClose != null ? r.openClose === 'Close' : r.amount > 0)
 
   // FIFO queue per underlying symbol
   const openMap = {}
