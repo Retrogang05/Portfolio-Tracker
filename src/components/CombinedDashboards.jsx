@@ -21,7 +21,7 @@ import { fmt } from '../utils/format'
 
 const GROUPS = [
   { label: 'Divya Portfolios', indices: [0, 2, 4, 5, 6], accent: 'violet' },
-  { label: 'SAHR Portfolios',  indices: [1, 3],           accent: 'blue'   },
+  { label: 'SAHR Portfolios',  indices: [1, 3, 7],        accent: 'blue'   },
 ]
 
 const BROKER_BADGE = {

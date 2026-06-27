@@ -38,7 +38,7 @@ import { exportBackup, importBackup } from './utils/backup'
 import { fmt } from './utils/format'
 
 // Per-portfolio broker config — index matches portfolio slot
-const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec', 'tradestation', 'tradezero']
+const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec', 'tradestation', 'tradezero', 'ibkr']
 
 function overridesKey(idx)   { return `portfolio-tracker:strategy-overrides:${idx}` }
 function capitalTagsKey(idx) { return `portfolio-tracker:capital-tags:${idx}` }
@@ -64,7 +64,7 @@ function applyOverrides(trades, overrides) {
   })
 }
 
-const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ']
+const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ', 'Sharan IBKR']
 
 function emptyPortfolio(idx) {
   return {
@@ -87,7 +87,7 @@ function emptyPortfolio(idx) {
 
 export default function App() {
   const [portfolios, setPortfolios] = useState([
-    emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2), emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6),
+    emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2), emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6), emptyPortfolio(7),
   ])
   const [active, setActive] = useState(0)
   const [view, setView] = useState('options')     // 'options' | 'stocks'
@@ -561,13 +561,13 @@ export default function App() {
               if (!confirm('Clear all saved portfolio data and RBA rates?\n\nStrategy overrides and capital tags will also be removed.\nExport a backup first if you want to keep them.')) return
               await clearAll()
               // Clear localStorage overrides + tags for all portfolios
-              for (let i = 0; i < 7; i++) {
+              for (let i = 0; i < 8; i++) {
                 localStorage.removeItem(`portfolio-tracker:strategy-overrides:${i}`)
                 localStorage.removeItem(`portfolio-tracker:capital-tags:${i}`)
               }
               setPortfolios([
                 emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2),
-                emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6),
+                emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6), emptyPortfolio(7),
               ])
               setRbaRates(null)
               setRbaFileName('')
