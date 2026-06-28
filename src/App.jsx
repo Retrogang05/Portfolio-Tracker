@@ -297,6 +297,7 @@ export default function App() {
   const broker        = PORTFOLIO_BROKER[active] ?? 'tastytrade'
   const isSelfwealth  = broker === 'selfwealth'
   const isComsec      = broker === 'comsec'
+  const isSharan       = active === 7
   const isEquityOnly  = isSelfwealth || isComsec || isSharan  // no options toggle, always show stocks view
 
   // For Selfwealth, pick the right market's equity data; CommSec/others use shared equityData
@@ -304,7 +305,6 @@ export default function App() {
     ? (swMarket === 'aus' ? p.equityDataAUS : p.equityDataUS) ?? null
     : p.equityData
 
-  const isSharan       = active === 7
   const activeCurrency = isSharan ? 'INR' : isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
   const activeEquityDataDisplay = useMemo(() => {
     if (!isSharan || !activeEquityData) return activeEquityData
