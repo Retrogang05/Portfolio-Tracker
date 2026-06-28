@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { fmt, fmtINR } from '../utils/format'
+import { getINRRate } from '../utils/convertToINR'
 
 function fmtDate(d) {
   if (!d || isNaN(d)) return '—'
@@ -52,8 +53,9 @@ function NoteRow({ colSpan, noteKey, initialValue, onSaved }) {
   )
 }
 
-export default function StockClosedTable({ closedPositions = [], totalRealizedPnL = 0, portfolioIdx = 0, currency = 'USD' }) {
-  const fmtAmt = currency === 'INR' ? fmtINR : fmt
+export default function StockClosedTable({ closedPositions = [], totalRealizedPnL = 0, portfolioIdx = 0, currency = 'USD', rbiRates = null }) {
+  const fmtAmt = fmt
+  const showINR = !!rbiRates
   const [page, setPage]         = useState(0)
   const [sortKey, setSortKey]   = useState('sellDate')
   const [sortDir, setSortDir]   = useState(-1)
@@ -82,24 +84,27 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
   }, [])
 
   function exportToExcel() {
-    const currencyLabel = currency === 'INR' ? 'INR (₹)' : currency === 'AUD' ? 'AUD ($)' : 'USD ($)'
-    const rows = closedPositions.map(p => ({
-      Symbol:           p.symbol,
-      Quantity:         p.quantity,
-      'Buy Date':       p.buyDate  ? p.buyDate.toLocaleDateString('en-AU')  : '',
-      'Sell Date':      p.sellDate ? p.sellDate.toLocaleDateString('en-AU') : '',
-      'Days Held':      p.daysHeld,
-      'Buy Price':      p.buyPrice,
-      'Sell Price':     p.sellPrice,
-      [`Cost Basis (${currencyLabel})`]:    p.costBasis,
-      [`Sale Proceeds (${currencyLabel})`]: p.saleProceeds,
-      [`Buy Fees (${currencyLabel})`]:      p.buyFees,
-      [`Sell Fees (${currencyLabel})`]:     p.sellFees,
-      [`Total Fees (${currencyLabel})`]:    p.totalFees,
-      [`Net P&L (${currencyLabel})`]:       parseFloat(p.pnl.toFixed(2)),
-      'Win/Loss':       p.pnl >= 0 ? 'Win' : 'Loss',
-      ...(currency === 'INR' && p._inrRate ? { 'USD/INR Rate': p._inrRate } : {}),
-    }))
+    const currencyLabel = currency === 'AUD' ? 'AUD' : 'USD'
+    const rows = closedPositions.map(p => {
+      const inrRate = showINR ? (getINRRate(p.sellDate, rbiRates) ?? getINRRate(p.buyDate, rbiRates)) : null
+      return {
+        Symbol:                p.symbol,
+        Quantity:              p.quantity,
+        'Buy Date':            p.buyDate  ? p.buyDate.toLocaleDateString('en-AU')  : '',
+        'Sell Date':           p.sellDate ? p.sellDate.toLocaleDateString('en-AU') : '',
+        'Days Held':           p.daysHeld,
+        'Buy Price':           p.buyPrice,
+        'Sell Price':          p.sellPrice,
+        [`Cost Basis (${currencyLabel})`]:    p.costBasis,
+        [`Sale Proceeds (${currencyLabel})`]: p.saleProceeds,
+        [`Buy Fees (${currencyLabel})`]:      p.buyFees,
+        [`Sell Fees (${currencyLabel})`]:     p.sellFees,
+        [`Total Fees (${currencyLabel})`]:    p.totalFees,
+        [`Net P&L (${currencyLabel})`]:       parseFloat(p.pnl.toFixed(2)),
+        'Win/Loss':            p.pnl >= 0 ? 'Win' : 'Loss',
+        ...(inrRate ? { 'USD/INR Rate': inrRate, 'Net P&L (INR ₹)': parseFloat((p.pnl * inrRate).toFixed(2)) } : {}),
+      }
+    })
 
     const ws = XLSX.utils.json_to_sheet(rows)
     // Auto-width columns
@@ -214,6 +219,7 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
               {col('saleProceeds','Proceeds (gross)',   'right')}
               {col('totalFees',   'Fees',      'right')}
               {col('pnl',         'Net P&L',   'right')}
+              {showINR && <th className="px-3 py-2 text-xs text-teal-400 uppercase tracking-wider text-right whitespace-nowrap">Net P&L (₹)</th>}
             </tr>
           </thead>
           <tbody>
@@ -252,11 +258,22 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
                         >📝</button>
                       </div>
                     </td>
+                    {showINR && (() => {
+                      const rate = getINRRate(t.sellDate, rbiRates) ?? getINRRate(t.buyDate, rbiRates)
+                      const inrPnL = rate ? t.pnl * rate : null
+                      return (
+                        <td className="px-3 py-2.5 text-right text-xs">
+                          {inrPnL != null
+                            ? <span className={inrPnL >= 0 ? 'text-teal-400' : 'text-red-300'}>{fmtINR(inrPnL)}</span>
+                            : <span className="text-slate-600">—</span>}
+                        </td>
+                      )
+                    })()}
                   </tr>
                   {noteOpenKey === nKey && (
                     <NoteRow
                       key={`note-${i}`}
-                      colSpan={11}
+                      colSpan={showINR ? 12 : 11}
                       noteKey={nKey}
                       initialValue={note}
                       onSaved={handleNoteUpdate}

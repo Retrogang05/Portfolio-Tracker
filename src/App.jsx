@@ -33,7 +33,6 @@ import { buildTrades, computeStats, auFY, inFY } from './utils/calculatePnL'
 import { buildEquityTrades, computeEquityStats } from './utils/buildEquityTrades'
 import { parseRBA } from './utils/parseRBA'
 import { parseRBI } from './utils/parseRBI'
-import { convertEquityDataToINR } from './utils/convertToINR'
 import { buildTaxData } from './utils/buildTaxData'
 import { savePortfolios, loadPortfolios, saveRBA, loadRBA, saveRBI, loadRBI, clearAll, loadJournalEntries, saveJournalEntry, deleteJournalEntry } from './utils/db'
 import { exportBackup, importBackup } from './utils/backup'
@@ -305,12 +304,12 @@ export default function App() {
     ? (swMarket === 'aus' ? p.equityDataAUS : p.equityDataUS) ?? null
     : p.equityData
 
-  const activeCurrency = isSharan ? 'INR' : isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
+  const activeCurrency = isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
   const activeEquityDataDisplay = useMemo(() => {
     if (!isSharan || !activeEquityData) return activeEquityData
-    const converted = convertEquityDataToINR(activeEquityData, rbiRates ?? {})
-    return { ...converted, stats: computeEquityStats(converted.closedPositions, inFY) }
-  }, [isSharan, activeEquityData, rbiRates])
+    // For Sharan keep USD amounts; just recompute stats with Indian FY
+    return { ...activeEquityData, stats: computeEquityStats(activeEquityData.closedPositions, inFY) }
+  }, [isSharan, activeEquityData])
 
   const hasData = p.stats ||
     (activeEquityData && (activeEquityData.openPositions.length > 0 || activeEquityData.closedPositions.length > 0 )) ||
@@ -478,6 +477,11 @@ export default function App() {
     localStorage.setItem('portfolio-tracker:theme', theme)
   }, [theme])
 
+  // ── Equity-only portfolios always use the stocks view ────────────────────
+  useEffect(() => {
+    if (isEquityOnly) setView('stocks')
+  }, [isEquityOnly])
+
   // Brief full-screen loader while IndexedDB hydrates (typically < 100 ms)
   if (!dbReady) {
     return (
@@ -526,7 +530,7 @@ export default function App() {
                     if (pfBroker === 'selfwealth') {
                       setView('stocks')
                       setSwMarket('aus')
-                    } else if (pfBroker === 'comsec') {
+                    } else if (pfBroker === 'comsec' || i === 7) {
                       setView('stocks')
                     }
                   }}
@@ -1077,6 +1081,7 @@ export default function App() {
                         totalRealizedPnL={filteredEquityData.totalRealizedPnL}
                         portfolioIdx={active}
                         currency={activeCurrency ?? 'USD'}
+                        rbiRates={isSharan ? (rbiRates ?? null) : null}
                       />
                     </Collapsible>
                   )}
