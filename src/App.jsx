@@ -32,9 +32,10 @@ import { detectWheels } from './utils/detectWheel'
 import { buildTrades, computeStats, auFY, inFY } from './utils/calculatePnL'
 import { buildEquityTrades, computeEquityStats } from './utils/buildEquityTrades'
 import { parseRBA } from './utils/parseRBA'
+import { parseRBI } from './utils/parseRBI'
 import { convertEquityDataToINR } from './utils/convertToINR'
 import { buildTaxData } from './utils/buildTaxData'
-import { savePortfolios, loadPortfolios, saveRBA, loadRBA, clearAll, loadJournalEntries, saveJournalEntry, deleteJournalEntry } from './utils/db'
+import { savePortfolios, loadPortfolios, saveRBA, loadRBA, saveRBI, loadRBI, clearAll, loadJournalEntries, saveJournalEntry, deleteJournalEntry } from './utils/db'
 import { exportBackup, importBackup } from './utils/backup'
 import { fmt } from './utils/format'
 
@@ -102,6 +103,9 @@ export default function App() {
   const [rbaRates, setRbaRates] = useState(null)  // parsed RBA rate map
   const [rbaFileName, setRbaFileName] = useState('')
   const [rbaError, setRbaError] = useState(null)
+  const [rbiRates, setRbiRates] = useState(null)  // parsed RBI rate map (INR)
+  const [rbiFileName, setRbiFileName] = useState('')
+  const [rbiError, setRbiError] = useState(null)
   const [dbReady, setDbReady] = useState(false)   // true once IndexedDB initial load is done
   const [theme, setTheme] = useState(
     () => localStorage.getItem('portfolio-tracker:theme') ?? 'dark'
@@ -302,7 +306,11 @@ export default function App() {
 
   const isSharan       = active === 7
   const activeCurrency = isSharan ? 'INR' : isSelfwealth ? (swMarket === 'aus' ? 'AUD' : 'USD') : null
-  const activeEquityDataDisplay = isSharan ? convertEquityDataToINR(activeEquityData) : activeEquityData
+  const activeEquityDataDisplay = useMemo(() => {
+    if (!isSharan || !activeEquityData) return activeEquityData
+    const converted = convertEquityDataToINR(activeEquityData, rbiRates ?? {})
+    return { ...converted, stats: computeEquityStats(converted.closedPositions, inFY) }
+  }, [isSharan, activeEquityData, rbiRates])
 
   const hasData = p.stats ||
     (activeEquityData && (activeEquityData.openPositions.length > 0 || activeEquityData.closedPositions.length > 0 )) ||
@@ -385,6 +393,17 @@ export default function App() {
     }
   }
 
+  async function handleRBIFile(file) {
+    setRbiError(null)
+    try {
+      const rates = await parseRBI(file)
+      setRbiRates(rates)
+      setRbiFileName(file.name)
+    } catch (e) {
+      setRbiError(e.message)
+    }
+  }
+
   // ── Tax data (re-computed whenever portfolios or RBA rates change) ──────
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const taxData = useMemo(() => {
@@ -396,7 +415,7 @@ export default function App() {
   useEffect(() => {
     async function loadFromDB() {
       try {
-        const [savedPortfolios, savedRBA] = await Promise.all([loadPortfolios(), loadRBA()])
+        const [savedPortfolios, savedRBA, savedRBI] = await Promise.all([loadPortfolios(), loadRBA(), loadRBI()])
 
         // Restore portfolios — merge stored data over the fresh default so any
         // new fields added since the last save still get their default values.
@@ -412,6 +431,12 @@ export default function App() {
         if (savedRBA?.rates) {
           setRbaRates(savedRBA.rates)
           setRbaFileName(savedRBA.fileName ?? '')
+        }
+
+        // Restore RBI rates
+        if (savedRBI?.rates) {
+          setRbiRates(savedRBI.rates)
+          setRbiFileName(savedRBI.fileName ?? '')
         }
 
         // Load journal entries
@@ -440,6 +465,12 @@ export default function App() {
     if (!dbReady || !rbaRates) return
     saveRBA(rbaRates, rbaFileName).catch(e => console.warn('IndexedDB RBA save failed:', e))
   }, [rbaRates, rbaFileName, dbReady])
+
+  // ── IndexedDB: save RBI rates whenever they change ───────────────────────
+  useEffect(() => {
+    if (!dbReady || !rbiRates) return
+    saveRBI(rbiRates, rbiFileName).catch(e => console.warn('IndexedDB RBI save failed:', e))
+  }, [rbiRates, rbiFileName, dbReady])
 
   // ── Theme: sync .light class on <html> and persist choice ────────────────
   useEffect(() => {
@@ -745,6 +776,38 @@ export default function App() {
                 </ol>
               </div>
             )}
+
+            {/* RBI rates upload — only shown on Sharan tab */}
+            {isSharan && (
+              <div className="bg-slate-800/50 rounded-xl p-5 text-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-slate-300">RBI Reference Rates (USD → INR)</p>
+                    <p className="text-slate-500 text-xs mt-0.5">Required to convert trade amounts to Indian Rupees</p>
+                  </div>
+                  {rbiRates && (
+                    <span className="text-xs text-teal-400 bg-teal-900/30 border border-teal-700/40 px-2 py-1 rounded">
+                      ✓ {rbiFileName}
+                    </span>
+                  )}
+                </div>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleRBIFile(f); e.target.value = '' }}
+                  />
+                  <div className="flex-1 border border-dashed border-slate-600 group-hover:border-teal-600 rounded-lg px-4 py-3 text-center text-slate-500 group-hover:text-teal-400 transition-colors">
+                    {rbiRates ? '↑ Upload new RBI rates CSV' : '↑ Upload RBI Reference Rate CSV'}
+                  </div>
+                </label>
+                {rbiError && <p className="text-red-400 text-xs">{rbiError}</p>}
+                <p className="text-slate-600 text-xs">
+                  Download from rbi.org.in → Publications → Weekly Statistical Supplement → Reference Rates
+                </p>
+              </div>
+            )}
             {broker === 'selfwealth' && (
               <div className="bg-slate-800/50 rounded-xl p-5 text-sm text-slate-400 space-y-2">
                 <p className="font-medium text-slate-300">How to export from Selfwealth:</p>
@@ -1026,6 +1089,24 @@ export default function App() {
                         onTagChange={handleCapitalTagChange}
                       />
                     </Collapsible>
+                  )}
+
+                  {/* RBI rates upload strip — visible when Sharan data is loaded */}
+                  {isSharan && (
+                    <div className="flex items-center gap-3 bg-slate-800/50 rounded-xl px-5 py-3 text-sm">
+                      <span className="text-slate-400 shrink-0">₹ RBI Rates:</span>
+                      {rbiRates
+                        ? <span className="text-teal-400 text-xs">{rbiFileName}</span>
+                        : <span className="text-amber-400 text-xs">Not uploaded — amounts shown in USD</span>
+                      }
+                      <label className="ml-auto cursor-pointer">
+                        <input type="file" accept=".csv" className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleRBIFile(f); e.target.value = '' }} />
+                        <span className="text-xs text-slate-400 hover:text-teal-300 border border-slate-600 hover:border-teal-600 rounded px-2 py-1 transition-colors">
+                          {rbiRates ? 'Update rates' : 'Upload RBI CSV'}
+                        </span>
+                      </label>
+                    </div>
                   )}
                 </>
               )}

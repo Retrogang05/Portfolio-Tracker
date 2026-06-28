@@ -95,6 +95,29 @@ export async function loadRBA() {
   })
 }
 
+// ── RBI rates (Sharan / INR) ─────────────────────────────────────────────────
+
+export async function saveRBI(rates, fileName) {
+  const db = await openDB()
+  const tx = db.transaction(STORE_SET, 'readwrite')
+  tx.objectStore(STORE_SET).put({ key: 'rbi', rates, fileName })
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = resolve
+    tx.onerror    = e => reject(e.target.error)
+  })
+}
+
+export async function loadRBI() {
+  const db    = await openDB()
+  const tx    = db.transaction(STORE_SET, 'readonly')
+  const store = tx.objectStore(STORE_SET)
+  return new Promise((resolve, reject) => {
+    const req = store.get('rbi')
+    req.onsuccess = e => resolve(e.target.result ?? null)
+    req.onerror   = e => reject(e.target.error)
+  })
+}
+
 // ── Journal ───────────────────────────────────────────────────────────────────
 
 /** Load all journal entries (unsorted — sort in the component). */
