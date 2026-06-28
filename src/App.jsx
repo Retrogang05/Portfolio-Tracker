@@ -911,8 +911,8 @@ export default function App() {
                   </div>
                 )}
 
-                {/* AUS / US market selector — Selfwealth only */}
-                {isSelfwealth && (
+                {/* AUS / US market selector — Selfwealth only, and only when US data exists */}
+                {isSelfwealth && p.equityDataUS?.closedPositions?.length + p.equityDataUS?.openPositions?.length > 0 && (
                   <div className="bg-slate-800 rounded-lg p-1 flex gap-1 shrink-0">
                     <button
                       onClick={() => setSwMarket('aus')}
