@@ -88,8 +88,9 @@ function mapRow(r, idx) {
   const base = {
     rowType: 'Trade',
     date, timestampSec: ts,
-    // stable group key: same symbol on same day groups partial fills together
-    orderId: `${dateStr}|${symbol}`,
+    // Leave orderId empty so identifyStrategy falls back to timestamp+underlying grouping,
+    // which correctly links all legs of a combo order that fill at the same second.
+    orderId: '',
     subType: txType,
     action: qty >= 0 ? 'BUY' : 'SELL', // refined by inferOpenClose later
     symbol,

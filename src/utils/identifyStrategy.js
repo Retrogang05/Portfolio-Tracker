@@ -21,10 +21,12 @@ function legDTE(leg) {
 }
 
 function groupKey(row) {
-  // Order # is the definitive link for multi-leg orders placed together
+  // Order # is the definitive link for multi-leg orders placed together (Tastytrade etc.)
   if (row.orderId) return row.orderId
-  // Fallback: same second + same underlying = same strategy entry
-  return `${row.timestampSec}|${row.underlying}`
+  // Fallback for IBKR: bucket into 5-second windows so all legs of a combo that
+  // fill within a few seconds of each other get the same group key.
+  const bucket = Math.floor(Number(row.timestampSec) / 30)
+  return `${bucket}|${row.underlying}`
 }
 
 function classifyLegs(legs) {
