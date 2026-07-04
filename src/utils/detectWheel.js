@@ -144,21 +144,21 @@ const SPREAD_STRATEGIES = new Set([
 ])
 
 function tryDetectWheel(rows, underlying) {
-  // Collect strategyGroupIds whose opening legs were classified as a spread.
-  // Closing legs inherit a null strategyName but share the same strategyGroupId,
-  // so we exclude by group id to catch both sides of the trade.
-  const spreadGroupIds = new Set(
-    rows
-      .filter(r => r.strategyName && SPREAD_STRATEGIES.has(r.strategyName))
-      .map(r => r.strategyGroupId)
-      .filter(Boolean)
-  )
+  // Opening legs tagged as spread strategies give us the contract keys (expiry+strike+callPut)
+  // for all legs in those groups. Closing legs and expirations share the same contract key
+  // but have strategyGroupId=null, so we filter by contract key — not by group id.
+  const spreadContractKeys = new Set()
+  for (const r of rows) {
+    if (r.strategyName && SPREAD_STRATEGIES.has(r.strategyName) && r.callPut) {
+      spreadContractKeys.add(`${r.expiration}|${r.strike}|${r.callPut}`)
+    }
+  }
+  const isSpread = r => r.callPut != null && spreadContractKeys.has(`${r.expiration}|${r.strike}|${r.callPut}`)
 
   const allTradeRows = rows.filter(r => r.rowType === 'Trade')
-  // Strip out any legs that belong to a known spread strategy group
-  const tradeRows  = allTradeRows.filter(r => !spreadGroupIds.has(r.strategyGroupId))
+  const tradeRows  = allTradeRows.filter(r => !isSpread(r))
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
-  const expiryRows = rows.filter(r => r.rowType === 'Expiration')
+  const expiryRows = rows.filter(r => r.rowType === 'Expiration' && !isSpread(r))
 
   // Tastytrade separates the option assignment (rowType=Assignment) from the stock
   // delivery (rowType=EquityDelivery). IBKR combines both into the Assignment/Exercise
