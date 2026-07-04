@@ -224,7 +224,13 @@ function tryDetectWheel(rows, underlying) {
   // Equity P&L: sum of all equity delivery amounts for this underlying.
   // Put assignment rows have negative amounts (shares acquired at cost);
   // call assignment rows have positive amounts (shares sold at call strike).
-  const equityPnL = equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
+  // Only compute when BOTH sides are captured — if there's no negative-amount row,
+  // the stock was purchased via a regular trade (cost basis unknown) and we'd be
+  // showing gross proceeds rather than actual P&L.
+  const hasAcquisitionRow = equityRows.some(r => (r.amount ?? 0) < 0)
+  const equityPnL = hasAcquisitionRow
+    ? equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
+    : 0
 
   const totalPremium = [...callLegs, ...putLegs].reduce((s, l) => s + l.netPremium, 0)
   const hasOpenCall  = callLegs.some(l => l.status === 'Open')
