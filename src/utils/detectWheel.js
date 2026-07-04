@@ -134,8 +134,29 @@ function tryDetectPMCC(rows, underlying) {
 
 // ── Wheel / Covered Call Cycle ────────────────────────────────────────────────
 
+// Strategy names that indicate a defined-risk spread — never part of a wheel cycle.
+const SPREAD_STRATEGIES = new Set([
+  'Iron Condor', 'Iron Butterfly', 'Reverse Iron Condor', 'Reverse Iron Butterfly',
+  'Bull Call Spread', 'Bear Call Spread', 'Bull Put Spread', 'Bear Put Spread',
+  'Call Calendar', 'Call Diagonal', 'Put Calendar', 'Put Diagonal',
+  'Long Straddle', 'Short Straddle', 'Long Strangle', 'Short Strangle',
+  'Jade Lizard', 'Inverted Jade Lizard', 'Box Spread', 'Custom Combo',
+])
+
 function tryDetectWheel(rows, underlying) {
-  const tradeRows  = rows.filter(r => r.rowType === 'Trade')
+  // Collect strategyGroupIds whose opening legs were classified as a spread.
+  // Closing legs inherit a null strategyName but share the same strategyGroupId,
+  // so we exclude by group id to catch both sides of the trade.
+  const spreadGroupIds = new Set(
+    rows
+      .filter(r => r.strategyName && SPREAD_STRATEGIES.has(r.strategyName))
+      .map(r => r.strategyGroupId)
+      .filter(Boolean)
+  )
+
+  const allTradeRows = rows.filter(r => r.rowType === 'Trade')
+  // Strip out any legs that belong to a known spread strategy group
+  const tradeRows  = allTradeRows.filter(r => !spreadGroupIds.has(r.strategyGroupId))
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration')
 
@@ -149,13 +170,7 @@ function tryDetectWheel(rows, underlying) {
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
-  const longPuts   = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('BUY')  && r.openClose === 'Open')
-
   const hasAssignments = assignRows.length > 0
-  // If every short put is paired with a long put (same or more long puts than short puts),
-  // this is a spread/condor structure (Iron Condor, Bull Put Spread) — not a wheel.
-  // But if there are more short puts than long puts, the excess uncovered shorts are wheel entries.
-  if (longPuts.length >= shortPuts.length && shortPuts.length > 0 && !hasAssignments) return null
 
   // A single short put is enough — the user always sells puts as wheel entries.
   // Standalone short-call-only positions still need ≥ 2 legs to avoid
