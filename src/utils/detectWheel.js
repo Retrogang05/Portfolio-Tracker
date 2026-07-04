@@ -149,8 +149,13 @@ function tryDetectWheel(rows, underlying) {
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
+  const longPuts   = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('BUY')  && r.openClose === 'Open')
 
   const hasAssignments = assignRows.length > 0
+  // Positions with long puts are spread/condor structures (Iron Condor, Bull Put Spread, etc.),
+  // not wheel entries — wheels never buy puts as protection.
+  if (longPuts.length > 0 && !hasAssignments) return null
+
   // A single short put is enough — the user always sells puts as wheel entries.
   // Standalone short-call-only positions still need ≥ 2 legs to avoid
   // misclassifying one-off covered calls as wheel cycles.
