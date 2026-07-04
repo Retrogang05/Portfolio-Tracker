@@ -23,10 +23,11 @@ function legDTE(leg) {
 function groupKey(row) {
   // Order # is the definitive link for multi-leg orders placed together (Tastytrade etc.)
   if (row.orderId) return row.orderId
-  // Fallback for IBKR: bucket into 5-second windows so all legs of a combo that
-  // fill within a few seconds of each other get the same group key.
-  const bucket = Math.floor(Number(row.timestampSec) / 30)
-  return `${bucket}|${row.underlying}`
+  // Fallback for IBKR: 30-second bucket + underlying + expiration.
+  // Including expiration prevents an Iron Condor leg from being grouped with an
+  // unrelated single-leg trade on the same underlying but a different expiry.
+  const bucket = Math.floor(Number(row.timestampSec) / 10)
+  return `${bucket}|${row.underlying}|${row.expiration ?? ''}`
 }
 
 function classifyLegs(legs) {
@@ -41,9 +42,9 @@ function classifyLegs(legs) {
       if (isBuy(l) && legDTE(l) > 60) return 'PMCC (Long Leg)'
       return isBuy(l) ? 'Long Call' : 'Short Call'
     }
-    // Standalone short puts are wheel entries by default.
-    // Multi-leg puts (spreads, condors) never reach this branch.
-    return isBuy(l) ? 'Long Put' : 'Wheel (CSP)'
+    if (isBuy(l)) return 'Long Put'
+    // Short puts with <= 5 DTE are short-term trades, not wheel entries
+    return legDTE(l) > 5 ? 'Wheel (CSP)' : 'Short Put'
   }
 
   // ── Two legs ────────────────────────────────────────────────────────────────
