@@ -160,12 +160,17 @@ function tryDetectWheel(rows, underlying) {
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration' && !isSpread(r))
 
-  // Tastytrade separates the option assignment (rowType=Assignment) from the stock
-  // delivery (rowType=EquityDelivery). IBKR combines both into the Assignment/Exercise
-  // row itself (instrumentType='Equity'). Collect both so equityPnL works for either.
+  // Equity cash flows — three sources:
+  // • Tastytrade EquityDelivery rows (separate acquisition/disposition rows)
+  // • IBKR Assignment/Exercise rows with instrumentType='Equity' (combined option+equity row)
+  // • Regular equity Trade rows (stock bought/sold at market, e.g. re-buying after call assignment)
+  // Including all three lets us compute actual stock P&L = Σ(amount) across the full cycle,
+  // which equals (Sale Price − Cost Basis) × qty, matching the wheel formula:
+  //   Total P&L = (Final Sale Price − Put Strike) + Total Premiums
   const equityRows = rows.filter(r =>
     r.rowType === 'EquityDelivery' ||
-    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity')
+    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity') ||
+    (r.rowType === 'Trade' && r.instrumentType === 'Equity')
   )
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
@@ -221,16 +226,9 @@ function tryDetectWheel(rows, underlying) {
     r.callPut === 'CALL' || (r.instrumentType === 'Equity' && r.action !== 'BUY_TO_OPEN')
   ).map(makeAssignment)
 
-  // Equity P&L: sum of all equity delivery amounts for this underlying.
-  // Put assignment rows have negative amounts (shares acquired at cost);
-  // call assignment rows have positive amounts (shares sold at call strike).
-  // Only compute when BOTH sides are captured — if there's no negative-amount row,
-  // the stock was purchased via a regular trade (cost basis unknown) and we'd be
-  // showing gross proceeds rather than actual P&L.
-  const hasAcquisitionRow = equityRows.some(r => (r.amount ?? 0) < 0)
-  const equityPnL = hasAcquisitionRow
-    ? equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
-    : 0
+  // Equity P&L = Σ(all equity cash flows): negative for buys, positive for sells.
+  // Net = (proceeds from all stock sales) − (cost of all stock purchases) = actual stock P&L.
+  const equityPnL = equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
   const totalPremium = [...callLegs, ...putLegs].reduce((s, l) => s + l.netPremium, 0)
   const hasOpenCall  = callLegs.some(l => l.status === 'Open')
