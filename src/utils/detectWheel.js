@@ -60,6 +60,10 @@ function buildLegGroups(rows) {
       openDate:    opens[0]?.date ?? allDates[0] ?? null,
       closeDate:   isClosed ? (expireds[0]?.date ?? closes.at(-1)?.date ?? null) : null,
       netPremium,
+      // isShort: true if the opening action was a SELL (credit leg), false for BUY (debit/long leg).
+      // Used by stripSpreadPairs — more reliable than netPremium sign since wings bought for $0
+      // have netPremium = 0 which is neither positive nor negative.
+      isShort:     opens.some(r => r.action.startsWith('SELL')),
       status:      isClosed ? 'Closed' : 'Open',
       closeType,
     }
@@ -160,17 +164,12 @@ function tryDetectWheel(rows, underlying) {
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration' && !isSpread(r))
 
-  // Equity cash flows — three sources:
-  // • Tastytrade EquityDelivery rows (separate acquisition/disposition rows)
-  // • IBKR Assignment/Exercise rows with instrumentType='Equity' (combined option+equity row)
-  // • Regular equity Trade rows (stock bought/sold at market, e.g. re-buying after call assignment)
-  // Including all three lets us compute actual stock P&L = Σ(amount) across the full cycle,
-  // which equals (Sale Price − Cost Basis) × qty, matching the wheel formula:
-  //   Total P&L = (Final Sale Price − Put Strike) + Total Premiums
+  // Equity cash flows from assignment/exercise events only.
+  // Regular equity Trade rows are excluded — they may include unrelated stock
+  // purchases that would distort the wheel P&L.
   const equityRows = rows.filter(r =>
     r.rowType === 'EquityDelivery' ||
-    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity') ||
-    (r.rowType === 'Trade' && r.instrumentType === 'Equity')
+    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity')
   )
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
@@ -204,8 +203,9 @@ function tryDetectWheel(rows, underlying) {
   // Secondary spread filter: remove vertical spread pairs that weren't caught by
   // identifyStrategy (e.g. legs entered on different days → different timestamp buckets
   // → each classified as single-leg and not in spreadContractKeys).
-  // Rule: within the same expiry and option type, if there is exactly one credit leg
-  // (netPremium > 0) and one debit leg (netPremium < 0), they form a vertical spread — strip both.
+  // Uses isShort (open trade direction) rather than netPremium sign — wings bought for $0
+  // have netPremium = 0 which netPremium < 0 would miss.
+  // Rule: within the same expiry, if shorts and longs are equal in count → vertical spread → strip all.
   function stripSpreadPairs(legs) {
     const byExpiry = {}
     for (const leg of legs) {
@@ -215,9 +215,9 @@ function tryDetectWheel(rows, underlying) {
     }
     const kept = []
     for (const group of Object.values(byExpiry)) {
-      const credits = group.filter(l => l.netPremium > 0)
-      const debits  = group.filter(l => l.netPremium < 0)
-      if (credits.length > 0 && debits.length > 0 && credits.length === debits.length) continue
+      const shorts = group.filter(l => l.isShort)
+      const longs  = group.filter(l => !l.isShort)
+      if (shorts.length > 0 && longs.length > 0 && shorts.length === longs.length) continue
       kept.push(...group)
     }
     return kept
@@ -250,9 +250,14 @@ function tryDetectWheel(rows, underlying) {
     r.callPut === 'CALL' || (r.instrumentType === 'Equity' && r.action !== 'BUY_TO_OPEN')
   ).map(makeAssignment)
 
-  // Equity P&L = Σ(all equity cash flows): negative for buys, positive for sells.
-  // Net = (proceeds from all stock sales) − (cost of all stock purchases) = actual stock P&L.
-  const equityPnL = equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
+  // Equity P&L only when we have both sides of the round-trip:
+  // a negative row (stock acquired via put assignment) AND a positive row (stock disposed).
+  // Without both, we'd show either gross proceeds or gross cost — not actual P&L.
+  const hasAcquisition  = equityRows.some(r => (r.amount ?? 0) < 0)
+  const hasDisposition  = equityRows.some(r => (r.amount ?? 0) > 0)
+  const equityPnL = (hasAcquisition && hasDisposition)
+    ? equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
+    : 0
 
   const totalPremium = [...filteredCallLegs, ...filteredPutLegs].reduce((s, l) => s + l.netPremium, 0)
   const hasOpenCall  = filteredCallLegs.some(l => l.status === 'Open')
