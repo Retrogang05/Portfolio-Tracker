@@ -182,22 +182,22 @@ function tryDetectWheel(rows, underlying) {
   const hasWheelActivity = shortPuts.length >= 1 || shortCalls.length >= 2 || hasAssignments
   if (!hasWheelActivity) return null
 
-  // Build call legs (short side only)
-  const callLegRows = [
-    ...tradeRows.filter(r => r.callPut === 'CALL'),
-    ...expiryRows.filter(r => r.callPut === 'CALL'),
-  ]
+  // Wheel leg rows: only short entries (SELL_TO_OPEN) and their closes (BUY_TO_CLOSE).
+  // Exclude BUY_TO_OPEN (long legs) and SELL_TO_CLOSE (closing a long) — those are
+  // directional trades, not wheel/CC entries. Expiration rows are always included.
+  const isWheelLegRow = r =>
+    r.rowType !== 'Trade' ||
+    (r.action === 'SELL_TO_OPEN') ||
+    (r.action === 'BUY_TO_CLOSE')
+
   const callLegs = buildLegGroups(
-    callLegRows.filter(r => r.rowType !== 'Trade' || r.action?.startsWith('SELL') || r.openClose === 'Close')
+    [...tradeRows.filter(r => r.callPut === 'CALL' && isWheelLegRow(r)),
+     ...expiryRows.filter(r => r.callPut === 'CALL')]
   )
 
-  // Build put legs (short side only)
-  const putLegRows = [
-    ...tradeRows.filter(r => r.callPut === 'PUT'),
-    ...expiryRows.filter(r => r.callPut === 'PUT'),
-  ]
   const putLegs = buildLegGroups(
-    putLegRows.filter(r => r.rowType !== 'Trade' || r.action?.startsWith('SELL') || r.openClose === 'Close')
+    [...tradeRows.filter(r => r.callPut === 'PUT' && isWheelLegRow(r)),
+     ...expiryRows.filter(r => r.callPut === 'PUT')]
   )
 
   // Secondary spread filter: remove vertical spread pairs that weren't caught by
@@ -225,7 +225,9 @@ function tryDetectWheel(rows, underlying) {
   const filteredCallLegs = stripSpreadPairs(callLegs)
   const filteredPutLegs  = stripSpreadPairs(putLegs)
 
-  if (!filteredCallLegs.length && !filteredPutLegs.length) return null
+  // Keep the position if assignments exist even with no remaining option legs —
+  // the assignment is the key event (e.g. a spread where one leg was assigned).
+  if (!filteredCallLegs.length && !filteredPutLegs.length && !hasAssignments) return null
 
   // Assignment events — two flavours:
   // • Tastytrade: Assignment row has option details (callPut/strike/expiration);
