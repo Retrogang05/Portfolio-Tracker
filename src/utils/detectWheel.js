@@ -201,7 +201,31 @@ function tryDetectWheel(rows, underlying) {
     putLegRows.filter(r => r.rowType !== 'Trade' || r.action?.startsWith('SELL') || r.openClose === 'Close')
   )
 
-  if (!callLegs.length && !putLegs.length) return null
+  // Secondary spread filter: remove vertical spread pairs that weren't caught by
+  // identifyStrategy (e.g. legs entered on different days → different timestamp buckets
+  // → each classified as single-leg and not in spreadContractKeys).
+  // Rule: within the same expiry and option type, if there is exactly one credit leg
+  // (netPremium > 0) and one debit leg (netPremium < 0), they form a vertical spread — strip both.
+  function stripSpreadPairs(legs) {
+    const byExpiry = {}
+    for (const leg of legs) {
+      const k = leg.expiration ?? ''
+      if (!byExpiry[k]) byExpiry[k] = []
+      byExpiry[k].push(leg)
+    }
+    const kept = []
+    for (const group of Object.values(byExpiry)) {
+      const credits = group.filter(l => l.netPremium > 0)
+      const debits  = group.filter(l => l.netPremium < 0)
+      if (credits.length > 0 && debits.length > 0 && credits.length === debits.length) continue
+      kept.push(...group)
+    }
+    return kept
+  }
+  const filteredCallLegs = stripSpreadPairs(callLegs)
+  const filteredPutLegs  = stripSpreadPairs(putLegs)
+
+  if (!filteredCallLegs.length && !filteredPutLegs.length) return null
 
   // Assignment events — two flavours:
   // • Tastytrade: Assignment row has option details (callPut/strike/expiration);
@@ -230,25 +254,25 @@ function tryDetectWheel(rows, underlying) {
   // Net = (proceeds from all stock sales) − (cost of all stock purchases) = actual stock P&L.
   const equityPnL = equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
-  const totalPremium = [...callLegs, ...putLegs].reduce((s, l) => s + l.netPremium, 0)
-  const hasOpenCall  = callLegs.some(l => l.status === 'Open')
-  const hasOpenPut   = putLegs.some(l => l.status === 'Open')
+  const totalPremium = [...filteredCallLegs, ...filteredPutLegs].reduce((s, l) => s + l.netPremium, 0)
+  const hasOpenCall  = filteredCallLegs.some(l => l.status === 'Open')
+  const hasOpenPut   = filteredPutLegs.some(l => l.status === 'Open')
 
   const currentPhase =
-    hasOpenCall          ? 'CoveredCall' :
-    hasOpenPut           ? 'ShortPut'    :
-    callAssignments.length ? 'PostCallAssignment' :
-    putAssignments.length  ? 'PostPutAssignment'  :
+    hasOpenCall                ? 'CoveredCall'        :
+    hasOpenPut                 ? 'ShortPut'           :
+    callAssignments.length     ? 'PostCallAssignment' :
+    putAssignments.length      ? 'PostPutAssignment'  :
     'Idle'
 
   return {
     id:           `WHEEL-${underlying}`,
-    type:         (hasAssignments || putLegs.length) ? 'Wheel' : 'CoveredCall',
+    type:         (hasAssignments || filteredPutLegs.length) ? 'Wheel' : 'CoveredCall',
     underlying,
     status:       hasOpenCall || hasOpenPut ? 'Active' : 'Complete',
     currentPhase,
-    callLegs,
-    putLegs,
+    callLegs:     filteredCallLegs,
+    putLegs:      filteredPutLegs,
     callAssignments,
     putAssignments,
     totalPremium,
