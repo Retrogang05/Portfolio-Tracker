@@ -100,8 +100,8 @@ function AssignmentRow({ assignment }) {
       <span className={`text-xs px-1.5 rounded shrink-0 ${isCall ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'}`}>
         {isCall ? 'Call' : 'Put'}
       </span>
-      <span className="text-slate-300 font-mono">${assignment.strike}</span>
-      <span className="text-slate-500 text-xs">{assignment.expiration}</span>
+      {assignment.strike > 0 && <span className="text-slate-300 font-mono">${assignment.strike}</span>}
+      {assignment.expiration && <span className="text-slate-500 text-xs">{assignment.expiration}</span>}
       <div className="flex-1" />
       {eq && (
         <span className="text-xs text-slate-400">
@@ -199,7 +199,8 @@ function PMCCCard({ pos }) {
 // ── Wheel / Covered Call Card ─────────────────────────────────────────────────
 
 function WheelCard({ pos }) {
-  const { callLegs, putLegs, callAssignments, putAssignments, totalPremium } = pos
+  const { callLegs, putLegs, callAssignments, putAssignments, totalPremium, equityPnL, totalWheelPnL } = pos
+  const hasEquityPnL = equityPnL != null && Math.abs(equityPnL) > 0.01
 
   // Build a merged timeline: puts, put assignments, calls, call assignments — sorted by date
   const timeline = [
@@ -236,12 +237,30 @@ function WheelCard({ pos }) {
           </div>
         </div>
 
-        {/* Total premium */}
-        <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5 gap-2 min-w-0">
-          <span className="text-slate-400 text-sm truncate">Total premium collected</span>
-          <span className={`font-bold shrink-0 ${totalPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            {fmtC(totalPremium)}
-          </span>
+        {/* P&L breakdown */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5 gap-2 min-w-0">
+            <span className="text-slate-400 text-sm truncate">Total premium collected</span>
+            <span className={`font-bold shrink-0 ${totalPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {fmtC(totalPremium)}
+            </span>
+          </div>
+          {hasEquityPnL && (
+            <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5 gap-2 min-w-0">
+              <span className="text-slate-400 text-sm truncate">Share P&amp;L (assignment → sale)</span>
+              <span className={`font-bold shrink-0 ${equityPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtC(equityPnL)}
+              </span>
+            </div>
+          )}
+          {hasEquityPnL && (
+            <div className="flex items-center justify-between bg-slate-900/60 rounded-lg px-4 py-2.5 gap-2 min-w-0 border border-slate-600/40">
+              <span className="text-slate-300 text-sm font-medium truncate">Total wheel P&amp;L</span>
+              <span className={`font-bold text-base shrink-0 ${totalWheelPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtC(totalWheelPnL)}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

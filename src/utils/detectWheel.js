@@ -137,8 +137,15 @@ function tryDetectPMCC(rows, underlying) {
 function tryDetectWheel(rows, underlying) {
   const tradeRows  = rows.filter(r => r.rowType === 'Trade')
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
-  const equityRows = rows.filter(r => r.rowType === 'EquityDelivery')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration')
+
+  // Tastytrade separates the option assignment (rowType=Assignment) from the stock
+  // delivery (rowType=EquityDelivery). IBKR combines both into the Assignment/Exercise
+  // row itself (instrumentType='Equity'). Collect both so equityPnL works for either.
+  const equityRows = rows.filter(r =>
+    r.rowType === 'EquityDelivery' ||
+    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity')
+  )
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
@@ -170,17 +177,33 @@ function tryDetectWheel(rows, underlying) {
 
   if (!callLegs.length && !putLegs.length) return null
 
-  // Assignment events — link to equity delivery that followed within 1 day
-  const makeAssignment = (r) => ({
-    callPut:      r.callPut,
-    strike:       r.strike,
-    expiration:   r.expiration,
-    date:         r.date,
-    // Find the equity row that settled on the same day (±1 day)
-    equity: equityRows.find(e => Math.abs(e.date - r.date) < 86400000 * 2) ?? null,
-  })
-  const callAssignments = assignRows.filter(r => r.callPut === 'CALL').map(makeAssignment)
-  const putAssignments  = assignRows.filter(r => r.callPut === 'PUT').map(makeAssignment)
+  // Assignment events — two flavours:
+  // • Tastytrade: Assignment row has option details (callPut/strike/expiration);
+  //   equity delivery is a separate EquityDelivery row linked by date.
+  // • IBKR: Assignment row IS the equity delivery (instrumentType='Equity');
+  //   callPut is inferred from qty sign (positive = put assignment = bought stock,
+  //   negative = call assignment = stock called away), strike = price paid/received.
+  const usedEquityRows = new Set()
+  const makeAssignment = (r) => {
+    const isIBKREquity = r.instrumentType === 'Equity'
+    const callPut  = isIBKREquity ? (r.action === 'BUY_TO_OPEN' ? 'PUT' : 'CALL') : r.callPut
+    const strike   = isIBKREquity ? r.price : r.strike
+    const eq       = isIBKREquity ? r
+                   : equityRows.find(e => !usedEquityRows.has(e) && Math.abs(e.date - r.date) < 86400000 * 2) ?? null
+    if (!isIBKREquity && eq) usedEquityRows.add(eq)
+    return { callPut, strike, expiration: r.expiration ?? '', date: r.date, equity: eq }
+  }
+  const putAssignments  = assignRows.filter(r =>
+    r.callPut === 'PUT' || (r.instrumentType === 'Equity' && r.action === 'BUY_TO_OPEN')
+  ).map(makeAssignment)
+  const callAssignments = assignRows.filter(r =>
+    r.callPut === 'CALL' || (r.instrumentType === 'Equity' && r.action !== 'BUY_TO_OPEN')
+  ).map(makeAssignment)
+
+  // Equity P&L: sum of all equity delivery amounts for this underlying.
+  // Put assignment rows have negative amounts (shares acquired at cost);
+  // call assignment rows have positive amounts (shares sold at call strike).
+  const equityPnL = equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
 
   const totalPremium = [...callLegs, ...putLegs].reduce((s, l) => s + l.netPremium, 0)
   const hasOpenCall  = callLegs.some(l => l.status === 'Open')
@@ -204,6 +227,8 @@ function tryDetectWheel(rows, underlying) {
     callAssignments,
     putAssignments,
     totalPremium,
+    equityPnL,
+    totalWheelPnL: totalPremium + equityPnL,
   }
 }
 
