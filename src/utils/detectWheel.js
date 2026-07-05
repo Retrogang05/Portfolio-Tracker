@@ -286,7 +286,9 @@ function tryDetectWheel(rows, underlying) {
     id:           `WHEEL-${underlying}`,
     type:         (hasAssignments || filteredPutLegs.length) ? 'Wheel' : 'CoveredCall',
     underlying,
-    status:       hasOpenCall || hasOpenPut ? 'Active' : 'Complete',
+    // Active if there are open option legs, or if stock was bought outright
+    // (not yet called away via assignment) — shares still held, more CCs to sell.
+    status:       hasOpenCall || hasOpenPut || (hasEquityPurchase && !hasAssignments) ? 'Active' : 'Complete',
     currentPhase,
     callLegs:     filteredCallLegs,
     putLegs:      filteredPutLegs,
