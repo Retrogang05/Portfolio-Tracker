@@ -201,6 +201,10 @@ function PMCCCard({ pos }) {
 function WheelCard({ pos }) {
   const { callLegs, putLegs, callAssignments, putAssignments, totalPremium, equityPnL, totalWheelPnL } = pos
   const hasEquityPnL = equityPnL != null && Math.abs(equityPnL) > 0.01
+  // "Option P&L" when any leg was bought back (closed for debit); otherwise "Premium collected"
+  const allLegs = [...callLegs, ...putLegs]
+  const hasBoughtBack = allLegs.some(l => l.closeType === 'Closed')
+  const premiumLabel = hasBoughtBack ? 'Option P&L' : 'Total premium collected'
 
   // Build a merged timeline: puts, put assignments, calls, call assignments — sorted by date
   const timeline = [
@@ -240,7 +244,7 @@ function WheelCard({ pos }) {
         {/* P&L breakdown */}
         <div className="space-y-1">
           <div className="flex items-center justify-between bg-slate-800/60 rounded-lg px-4 py-2.5 gap-2 min-w-0">
-            <span className="text-slate-400 text-sm truncate">Total premium collected</span>
+            <span className="text-slate-400 text-sm truncate">{premiumLabel}</span>
             <span className={`font-bold shrink-0 ${totalPremium >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               {fmtC(totalPremium)}
             </span>

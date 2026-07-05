@@ -200,12 +200,12 @@ function tryDetectWheel(rows, underlying) {
      ...expiryRows.filter(r => r.callPut === 'PUT')]
   )
 
-  // Secondary spread filter: remove vertical spread pairs that weren't caught by
-  // identifyStrategy (e.g. legs entered on different days → different timestamp buckets
-  // → each classified as single-leg and not in spreadContractKeys).
-  // Uses isShort (open trade direction) rather than netPremium sign — wings bought for $0
-  // have netPremium = 0 which netPremium < 0 would miss.
-  // Rule: within the same expiry, if shorts and longs are equal in count → vertical spread → strip all.
+  // Secondary spread filter: wheel positions are always SHORT (credit) — never debit/long.
+  // Removes long legs unconditionally, and strips shorts that are fully paired with longs
+  // (those are spread shorts, not wheel entries).
+  // Catches both:
+  //   • Same-day spreads where identifyStrategy couldn't tag them (different timestamp buckets)
+  //   • Lone protective long legs that slipped past the spreadContractKeys filter
   function stripSpreadPairs(legs) {
     const byExpiry = {}
     for (const leg of legs) {
@@ -217,8 +217,12 @@ function tryDetectWheel(rows, underlying) {
     for (const group of Object.values(byExpiry)) {
       const shorts = group.filter(l => l.isShort)
       const longs  = group.filter(l => !l.isShort)
-      if (shorts.length > 0 && longs.length > 0 && shorts.length === longs.length) continue
-      kept.push(...group)
+      // No shorts at all (only protective longs) → spread protection only, strip everything
+      if (shorts.length === 0) continue
+      // Shorts fully paired with longs → defined-risk spread → strip all
+      if (longs.length > 0 && shorts.length <= longs.length) continue
+      // Keep only the short legs; long legs are never genuine wheel entries
+      kept.push(...shorts)
     }
     return kept
   }
