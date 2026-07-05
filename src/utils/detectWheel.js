@@ -176,10 +176,16 @@ function tryDetectWheel(rows, underlying) {
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
   const hasAssignments = assignRows.length > 0
 
+  // Equity stock purchases for this underlying (BTO equity trade rows).
+  // Used to qualify single-call covered call positions where stock was bought outright
+  // rather than acquired via put assignment.
+  const hasEquityPurchase = allTradeRows.some(r => r.instrumentType === 'Equity' && r.action === 'BUY_TO_OPEN')
+
   // A single short put is enough — the user always sells puts as wheel entries.
-  // Standalone short-call-only positions still need ≥ 2 legs to avoid
-  // misclassifying one-off covered calls as wheel cycles.
-  const hasWheelActivity = shortPuts.length >= 1 || shortCalls.length >= 2 || hasAssignments
+  // Standalone short-call-only positions need ≥ 2 legs OR clear stock ownership
+  // (equity purchase) to avoid misclassifying one-off single calls as wheel cycles.
+  const hasWheelActivity = shortPuts.length >= 1 || shortCalls.length >= 2 || hasAssignments ||
+    (shortCalls.length >= 1 && hasEquityPurchase)
   if (!hasWheelActivity) return null
 
   // Wheel leg rows: only short entries (SELL_TO_OPEN) and their closes (BUY_TO_CLOSE).
