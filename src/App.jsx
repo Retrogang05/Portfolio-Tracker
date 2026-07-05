@@ -193,11 +193,19 @@ export default function App() {
       const currentOverrides = loadOverrides(idx)
       const withOverrides = applyOverrides(closedTrades, currentOverrides)
 
+      // detectWheels needs strategyName on option rows (set by tagRowsWithStrategy) to
+      // identify and filter spread legs. Merge tagged option rows back with non-option rows.
+      const nonOptionRows = allRows.filter(r =>
+        !((r.rowType === 'Trade' || r.rowType === 'Expiration') &&
+          (r.callPut === 'CALL' || r.callPut === 'PUT'))
+      )
+      const allTaggedRows = [...nonOptionRows, ...taggedRows]
+
       updatePortfolio(idx, {
         rawTrades:      closedTrades,
         trades:         withOverrides,
         stats:          computeStats(withOverrides),
-        wheels:         detectWheels(allRows),
+        wheels:         detectWheels(allTaggedRows),
         equityData,
         moneyMovements,
         loading:        false,
