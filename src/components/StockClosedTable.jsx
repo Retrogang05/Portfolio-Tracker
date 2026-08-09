@@ -157,7 +157,7 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
         <div>
           <h2 className="text-slate-300 font-semibold">Closed Positions</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            {filter ? `${filteredPositions.length} of ${closedPositions.length}` : closedPositions.length} trades · P&amp;L shown after brokerage fees
+            {filter ? `${filteredPositions.length} of ${closedPositions.length}` : closedPositions.length} trades · P&amp;L shown after brokerage fees{currency ? ` · amounts in ${currency}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">

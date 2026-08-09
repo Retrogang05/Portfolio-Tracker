@@ -116,9 +116,22 @@ export function buildEquityTrades(allRows) {
       const sellFees  = Math.abs((c.commissions    ?? 0) * closeFrac)
       const totalFees = parseFloat((buyFees + sellFees).toFixed(2))
 
-      // Gross cost and proceeds — fees listed separately, NOT baked in
-      const costBasis    = parseFloat((Math.abs(open.price) * matched).toFixed(2))  // price × qty only
-      const saleProceeds = parseFloat((Math.abs(c.price)    * matched).toFixed(2))  // price × qty only
+      // Gross cost and proceeds — fees listed separately, NOT baked in.
+      //
+      // Derived from `amount` (account base currency) rather than price × qty:
+      // brokers quote `price` in the INSTRUMENT's currency but settle `amount` in the
+      // ACCOUNT's base currency. For a USD holding in an AUD account those differ by the
+      // FX rate, which previously put gross figures in USD and P&L in AUD on the same row.
+      //
+      // Keyed off the amount SIGN rather than open/close, so this stays correct for short
+      // pairs too (sell-to-open then buy-to-cover, including same-day trades where the
+      // sell is recorded first). Cash paid is always the cost, cash received the proceeds.
+      // Since amount is net of fees:  |cash paid| = gross + fees,  cash received = gross − fees.
+      const paidLeg     = openCost < 0 ? { amt: openCost, fee: buyFees }  : { amt: closeNet, fee: sellFees }
+      const receivedLeg = openCost < 0 ? { amt: closeNet, fee: sellFees } : { amt: openCost, fee: buyFees }
+
+      const costBasis    = parseFloat((Math.abs(paidLeg.amt) - paidLeg.fee).toFixed(2))
+      const saleProceeds = parseFloat((receivedLeg.amt + receivedLeg.fee).toFixed(2))
 
       const daysHeld = Math.max(0, Math.round((c.date - open.date) / 86400000))
 
@@ -129,8 +142,12 @@ export function buildEquityTrades(allRows) {
         sellDate:     c.date,
         daysHeld,
         isDayTrade:   daysHeld <= 2,
-        buyPrice:     Math.abs(open.price),
-        sellPrice:    Math.abs(c.price),
+        // Per-share prices in base currency so they reconcile with costBasis/saleProceeds.
+        // The broker-quoted (instrument-currency) prices are kept alongside for reference.
+        buyPrice:     matched > 0 ? costBasis / matched    : 0,
+        sellPrice:    matched > 0 ? saleProceeds / matched : 0,
+        buyPriceQuoted:  Math.abs(open.price),
+        sellPriceQuoted: Math.abs(c.price),
         costBasis,       // gross cost (price × qty, no fees)
         saleProceeds,    // gross proceeds (price × qty, no fees)
         buyFees,
@@ -164,12 +181,17 @@ export function buildEquityTrades(allRows) {
       avgCost: totalCost / totalQty,
       earliestBuy: active[0].date,
       currency: active[0].currency ?? null,
-      lots: active.map(r => ({
-        date:  r.date,
-        qty:   r.remainingQty,
-        price: Math.abs(r.price),
-        cost:  Math.abs(r.amount) * (r.remainingQty / r.quantity),
-      })),
+      lots: active.map(r => {
+        const cost = Math.abs(r.amount) * (r.remainingQty / r.quantity)
+        return {
+          date:  r.date,
+          qty:   r.remainingQty,
+          // Base currency per share, consistent with avgCost/totalCost above
+          price: r.remainingQty > 0 ? cost / r.remainingQty : 0,
+          priceQuoted: Math.abs(r.price),
+          cost,
+        }
+      }),
     })
   }
 
@@ -179,5 +201,8 @@ export function buildEquityTrades(allRows) {
   const totalOpenCost    = openPositions.reduce((s, p) => s + p.totalCost, 0)
   const stats            = computeEquityStats(closedPositions)
 
-  return { closedPositions, openPositions, totalRealizedPnL, totalOpenCost, stats }
+  // Settlement currency all money figures above are expressed in.
+  const baseCurrency = equityRows.find(r => r.currency)?.currency ?? null
+
+  return { closedPositions, openPositions, totalRealizedPnL, totalOpenCost, stats, baseCurrency }
 }

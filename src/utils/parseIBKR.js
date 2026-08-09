@@ -27,7 +27,7 @@ function parseOptionSymbol(symbol) {
   }
 }
 
-function mapRow(r, idx) {
+function mapRow(r, idx, baseCurrency = 'USD') {
   const txType = (r['Transaction Type'] || '').trim()
   const symbol  = (r['Symbol']           || '').trim()
   const qty     = parseNum(r['Quantity'])
@@ -58,6 +58,7 @@ function mapRow(r, idx) {
       expiration: '', strike: 0, callPut: null,
       price: 0, commissions: 0, fees: 0,
       amount: net, description: desc, isExpiration: false,
+      currency: baseCurrency, priceCurrency: (r['Price Currency'] || '').trim() || baseCurrency,
     }
   }
 
@@ -75,6 +76,7 @@ function mapRow(r, idx) {
       _signedQty: qty,          // signed, so position tracking sees assigned shares
       price: Math.abs(price), commissions: comm, fees: 0,
       amount: net, description: desc, isExpiration: false,
+      currency: baseCurrency, priceCurrency: (r['Price Currency'] || '').trim() || baseCurrency,
     }
   }
 
@@ -104,6 +106,10 @@ function mapRow(r, idx) {
     amount: net,
     description: desc,
     isExpiration: false,
+    // `amount` settles in the account base currency; `price` is quoted in the
+    // instrument's own currency. They differ for foreign holdings.
+    currency: baseCurrency,
+    priceCurrency: (r['Price Currency'] || '').trim() || baseCurrency,
   }
 
   if (isOption) {
@@ -259,13 +265,22 @@ export function parseAllIBKR(file) {
 
           const cols = headerRow.slice(2) // ['Date', 'Account', 'Description', ...]
 
+          // Account base currency, declared in the Summary section:
+          //   Summary,Data,Base Currency,AUD
+          // All `Net Amount` values settle in this currency, while `Price` is quoted
+          // in the instrument's own currency.
+          const baseCurrencyRow = data.find(r =>
+            r[0] === 'Summary' && r[1] === 'Data' && (r[2] || '').trim() === 'Base Currency'
+          )
+          const baseCurrency = (baseCurrencyRow?.[3] || '').trim() || 'USD'
+
           // Extract and map all data rows
           const rows = data
             .filter(r => r[0] === 'Transaction History' && r[1] === 'Data')
             .map((r, i) => {
               const obj = {}
               cols.forEach((col, j) => { obj[col] = (r[j + 2] || '').trim() })
-              return mapRow(obj, i)
+              return mapRow(obj, i, baseCurrency)
             })
             .filter(Boolean)
 

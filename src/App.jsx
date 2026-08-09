@@ -1077,7 +1077,7 @@ export default function App() {
                     <StockOpenPositions
                       openPositions={activeEquityDataDisplay.openPositions}
                       totalOpenCost={activeEquityDataDisplay.totalOpenCost}
-                      currency={activeCurrency ?? 'USD'}
+                      currency={activeCurrency ?? activeEquityDataDisplay.baseCurrency ?? 'USD'}
                     />
                   </Collapsible>
 
@@ -1088,7 +1088,7 @@ export default function App() {
                         closedPositions={filteredEquityData.closedPositions}
                         totalRealizedPnL={filteredEquityData.totalRealizedPnL}
                         portfolioIdx={active}
-                        currency={activeCurrency ?? 'USD'}
+                        currency={activeCurrency ?? filteredEquityData.baseCurrency ?? 'USD'}
                         rbiRates={isSharan ? (rbiRates ?? null) : null}
                       />
                     </Collapsible>
