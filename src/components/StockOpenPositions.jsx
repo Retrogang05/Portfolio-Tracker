@@ -22,6 +22,14 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
 
   if (!openPositions.length) return null
 
+  // Show the quoted-price column only when some holding is quoted in a currency other
+  // than the account base — that price excludes fees and FX, so it is what you compare
+  // against the live market price. If everything is quoted in the base currency the
+  // column would just duplicate Avg Cost.
+  const showQuoted = openPositions.some(
+    p => p.avgCostQuoted > 0 && p.priceCurrency && p.priceCurrency !== cur
+  )
+
   const pages   = Math.ceil(openPositions.length / PAGE)
   const visible = openPositions.slice(page * PAGE, (page + 1) * PAGE)
 
@@ -47,6 +55,11 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
               <th className="px-3 py-2 text-left   text-xs text-slate-400 uppercase tracking-wider">Symbol</th>
               <th className="px-3 py-2 text-right  text-xs text-slate-400 uppercase tracking-wider">Qty</th>
               <th className="px-3 py-2 text-right  text-xs text-slate-400 uppercase tracking-wider">Avg Cost / share{cur ? ` (${cur})` : ''}</th>
+              {showQuoted && (
+                <th className="px-3 py-2 text-right text-xs text-slate-400 uppercase tracking-wider">
+                  Avg Cost / share <span className="normal-case text-slate-500">(quoted)</span>
+                </th>
+              )}
               <th className="px-3 py-2 text-right  text-xs text-slate-400 uppercase tracking-wider">Total Cost Basis{cur ? ` (${cur})` : ''}</th>
               <th className="px-3 py-2 text-left   text-xs text-slate-400 uppercase tracking-wider">First Buy</th>
               <th className="px-3 py-2 text-right  text-xs text-slate-400 uppercase tracking-wider">Lots</th>
@@ -58,6 +71,14 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
                 <td className="px-3 py-2.5 font-mono font-semibold text-slate-200">{pos.symbol}</td>
                 <td className="px-3 py-2.5 text-right text-slate-300">{pos.quantity.toLocaleString()}</td>
                 <td className="px-3 py-2.5 text-right text-slate-300">{fmtPrice(pos.avgCost)}</td>
+                {showQuoted && (
+                  <td className="px-3 py-2.5 text-right text-slate-300 whitespace-nowrap">
+                    {fmtPrice(pos.avgCostQuoted)}
+                    {pos.priceCurrency && (
+                      <span className="text-slate-500 text-xs ml-1">{pos.priceCurrency}</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-3 py-2.5 text-right font-semibold text-slate-200">{fmtAmt(pos.totalCost)}</td>
                 <td className="px-3 py-2.5 text-slate-400 text-xs">{fmtDate(pos.earliestBuy)}</td>
                 <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{pos.lots.length}</td>

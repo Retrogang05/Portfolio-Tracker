@@ -174,11 +174,19 @@ export function buildEquityTrades(allRows) {
 
     const totalQty  = active.reduce((s, r) => s + r.remainingQty, 0)
     const totalCost = active.reduce((s, r) => s + Math.abs(r.amount) * (r.remainingQty / r.quantity), 0)
+
+    // Weighted-average price in the currency the instrument is QUOTED in (e.g. USD for a
+    // US stock held in an AUD account). Excludes fees and FX, so it is directly
+    // comparable to the live market price the broker shows.
+    const quotedCost = active.reduce((s, r) => s + Math.abs(r.price) * r.remainingQty, 0)
+
     openPositions.push({
       symbol,
       quantity: totalQty,
       totalCost,
       avgCost: totalCost / totalQty,
+      avgCostQuoted: totalQty > 0 ? quotedCost / totalQty : 0,
+      priceCurrency: active[0].priceCurrency ?? active[0].currency ?? null,
       earliestBuy: active[0].date,
       currency: active[0].currency ?? null,
       lots: active.map(r => {
