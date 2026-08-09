@@ -169,7 +169,22 @@ function consolidatePartialFills(rows) {
 // Their own openClose/action are already correct from mapRow and are left untouched;
 // they only contribute to the running position.
 function inferOpenClose(positionRows) {
-  const sorted = [...positionRows].sort((a, b) => a.date - b.date)
+  const sorted = [...positionRows].sort((a, b) => {
+    const byDate = a.date - b.date
+    if (byDate !== 0) return byDate
+
+    // Same-day tie-break, EQUITY only: IBKR timestamps are date-only and the export
+    // lists rows newest-first, so a same-day buy+sell pair arrives sell-first. Read in
+    // that order it looks like opening a short — impossible in a cash account, which
+    // must own shares before selling them. Process acquisitions first.
+    //
+    // Options are deliberately exempt: sell-to-open is a normal opening action there
+    // (premium selling), so a same-day STO+BTC must keep its recorded order.
+    if (a.instrumentType !== 'Equity' || b.instrumentType !== 'Equity') return 0
+    const aIsSell = (a._signedQty ?? 0) < 0 ? 1 : 0
+    const bIsSell = (b._signedQty ?? 0) < 0 ? 1 : 0
+    return aIsSell - bIsSell
+  })
   const positions = {}
 
   for (const row of sorted) {
