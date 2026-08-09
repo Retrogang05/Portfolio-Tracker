@@ -164,13 +164,49 @@ function tryDetectWheel(rows, underlying) {
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration' && !isSpread(r))
 
-  // Equity cash flows from assignment/exercise events only.
-  // Regular equity Trade rows are excluded — they may include unrelated stock
-  // purchases that would distort the wheel P&L.
-  const equityRows = rows.filter(r =>
+  // Equity cash flows from assignment/exercise events.
+  // Regular equity Trade rows are NOT included wholesale — they may contain unrelated
+  // stock purchases that would distort the wheel P&L.
+  const assignmentEquityRows = rows.filter(r =>
     r.rowType === 'EquityDelivery' ||
     ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity')
   )
+
+  // Shares acquired via put assignment, and the date of the earliest such acquisition.
+  const acquisitions = assignmentEquityRows.filter(r => (r.amount ?? 0) < 0)
+  const assignedQty = acquisitions.reduce((s, r) => s + (r.quantity ?? 0), 0)
+  const firstAcqDate = acquisitions.length
+    ? Math.min(...acquisitions.map(r => r.date))
+    : null
+
+  // A wheel can close its stock leg two ways:
+  //   • Called away  → Assignment/Exercise row (already in assignmentEquityRows)
+  //   • Sold on the open market → regular equity Trade SELL row
+  // Include the latter, but ONLY sells dated on/after the assignment that delivered the
+  // shares, and only up to the assigned quantity. This captures the wheel exit without
+  // pulling in unrelated stock trades (e.g. positions held long before the wheel started).
+  const postAssignmentSells = []
+  if (firstAcqDate != null && assignedQty > 0) {
+    let remaining = assignedQty
+    const candidates = allTradeRows
+      .filter(r =>
+        r.instrumentType === 'Equity' &&
+        r.action?.startsWith('SELL') &&
+        r.date >= firstAcqDate
+      )
+      .sort((a, b) => a.date - b.date)
+
+    for (const r of candidates) {
+      if (remaining <= 0) break
+      const useQty = Math.min(r.quantity, remaining)
+      // Pro-rate the amount if only part of this sale covers assigned shares
+      const ratio = r.quantity > 0 ? useQty / r.quantity : 0
+      postAssignmentSells.push({ ...r, quantity: useQty, amount: (r.amount ?? 0) * ratio })
+      remaining -= useQty
+    }
+  }
+
+  const equityRows = [...assignmentEquityRows, ...postAssignmentSells]
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
@@ -275,10 +311,17 @@ function tryDetectWheel(rows, underlying) {
   const hasOpenCall  = filteredCallLegs.some(l => l.status === 'Open')
   const hasOpenPut   = filteredPutLegs.some(l => l.status === 'Open')
 
+  // Open-market sales of assigned shares, for display in the lifecycle timeline.
+  const shareSales = postAssignmentSells.map(r => ({
+    date: r.date, quantity: r.quantity, price: r.price, amount: r.amount,
+  }))
+  const soldOnMarket = shareSales.length > 0
+
   const currentPhase =
     hasOpenCall                ? 'CoveredCall'        :
     hasOpenPut                 ? 'ShortPut'           :
     callAssignments.length     ? 'PostCallAssignment' :
+    soldOnMarket               ? 'SharesSold'         :
     putAssignments.length      ? 'PostPutAssignment'  :
     'Idle'
 
@@ -286,14 +329,17 @@ function tryDetectWheel(rows, underlying) {
     id:           `WHEEL-${underlying}`,
     type:         (hasAssignments || filteredPutLegs.length) ? 'Wheel' : 'CoveredCall',
     underlying,
-    // Active if there are open option legs, or if stock was bought outright
-    // (not yet called away via assignment) — shares still held, more CCs to sell.
-    status:       hasOpenCall || hasOpenPut || (hasEquityPurchase && !hasAssignments) ? 'Active' : 'Complete',
+    // Active if there are open option legs, or if stock is still held — either bought
+    // outright, or assigned and not yet disposed of (called away or sold on market).
+    status:       hasOpenCall || hasOpenPut ||
+                  (hasEquityPurchase && !hasAssignments) ||
+                  (hasAcquisition && !hasDisposition) ? 'Active' : 'Complete',
     currentPhase,
     callLegs:     filteredCallLegs,
     putLegs:      filteredPutLegs,
     callAssignments,
     putAssignments,
+    shareSales,
     totalPremium,
     equityPnL,
     totalWheelPnL: totalPremium + equityPnL,

@@ -113,6 +113,23 @@ function AssignmentRow({ assignment }) {
   )
 }
 
+// ── Share sale row (assigned stock sold on the open market) ───────────────────
+
+function ShareSaleRow({ sale }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-emerald-900/20 ring-1 ring-emerald-700/40">
+      <span className="text-emerald-400 text-xs font-medium shrink-0">SOLD</span>
+      <span className="text-xs px-1.5 rounded shrink-0 bg-slate-700 text-slate-300">Stock</span>
+      <span className="text-slate-300 font-mono">${sale.price?.toFixed(2)}</span>
+      <div className="flex-1" />
+      <span className="text-xs text-slate-400">
+        Shares sold on market · {sale.quantity} shares @ ${sale.price?.toFixed(2)}
+      </span>
+      <span className="text-slate-500 text-xs">{fmtDate(sale.date)}</span>
+    </div>
+  )
+}
+
 // ── PMCC Card ─────────────────────────────────────────────────────────────────
 
 function PMCCCard({ pos }) {
@@ -199,7 +216,7 @@ function PMCCCard({ pos }) {
 // ── Wheel / Covered Call Card ─────────────────────────────────────────────────
 
 function WheelCard({ pos }) {
-  const { callLegs, putLegs, callAssignments, putAssignments, totalPremium, equityPnL, totalWheelPnL } = pos
+  const { callLegs, putLegs, callAssignments, putAssignments, shareSales = [], totalPremium, equityPnL, totalWheelPnL } = pos
   const hasEquityPnL = equityPnL != null && Math.abs(equityPnL) > 0.01
   // "Option P&L" when any leg was bought back (closed for debit); otherwise "Premium collected"
   const allLegs = [...callLegs, ...putLegs]
@@ -212,6 +229,7 @@ function WheelCard({ pos }) {
     ...putAssignments.map(a => ({ kind: 'putAssignment', assignment: a, date: a.date })),
     ...callLegs.map(l => ({ kind: 'call', leg: l, date: l.openDate })),
     ...callAssignments.map(a => ({ kind: 'callAssignment', assignment: a, date: a.date })),
+    ...shareSales.map(s => ({ kind: 'shareSale', sale: s, date: s.date })),
   ].filter(e => e.date).sort((a, b) => a.date - b.date)
 
   return (
@@ -236,6 +254,8 @@ function WheelCard({ pos }) {
             {timeline.map((entry, i) => {
               if (entry.kind === 'put' || entry.kind === 'call')
                 return <LegRow key={i} leg={entry.leg} showCallPut />
+              if (entry.kind === 'shareSale')
+                return <ShareSaleRow key={i} sale={entry.sale} />
               return <AssignmentRow key={i} assignment={entry.assignment} />
             })}
           </div>
@@ -277,6 +297,7 @@ function PhaseLabel({ phase }) {
     ShortPut:           { label: 'Selling Puts',    cls: 'text-orange-300' },
     PostCallAssignment: { label: 'Stock Called Away', cls: 'text-amber-300' },
     PostPutAssignment:  { label: 'Stock Assigned',  cls: 'text-amber-300' },
+    SharesSold:         { label: 'Shares Sold',     cls: 'text-emerald-300' },
     Idle:               { label: 'Idle',            cls: 'text-slate-500' },
   }
   const m = map[phase] ?? { label: phase, cls: 'text-slate-500' }
