@@ -163,23 +163,32 @@ function consolidatePartialFills(rows) {
 
 // FIFO position tracking: infers openClose + action from net position changes.
 //
-// Assignment/Exercise rows are fed in alongside Trade rows because they change the
-// share position too — shares delivered by a put assignment must be visible to the
-// tracker, otherwise a later sale of those shares looks like opening a short.
-// Their own openClose/action are already correct from mapRow and are left untouched;
-// they only contribute to the running position.
+// Assignment/Exercise rows participate too, and have their direction inferred here
+// rather than from the quantity sign alone. Both facts matter:
+//  • Shares delivered by a put assignment must be visible to the tracker, or a later
+//    sale of those shares looks like opening a short.
+//  • A quantity-sign heuristic marks every assignment sell as a Close. When a spread
+//    breaches, the short leg is assigned while flat — that sell OPENS a short, which
+//    the long leg's exercise closes out later (sometimes days later, once the market
+//    reopens). Marking both legs Close leaves the pair unmatchable and silently drops
+//    the trade's P&L entirely.
 function inferOpenClose(positionRows) {
   const sorted = [...positionRows].sort((a, b) => {
     const byDate = a.date - b.date
     if (byDate !== 0) return byDate
 
-    // Same-day tie-break, EQUITY only: IBKR timestamps are date-only and the export
-    // lists rows newest-first, so a same-day buy+sell pair arrives sell-first. Read in
-    // that order it looks like opening a short — impossible in a cash account, which
-    // must own shares before selling them. Process acquisitions first.
+    // Same-day tie-break, plain equity TRADES only: IBKR timestamps are date-only and
+    // the export lists rows newest-first, so a same-day buy+sell pair arrives sell-first.
+    // Read in that order it looks like opening a short — impossible in a cash account,
+    // which must own shares before selling them. Process acquisitions first.
     //
-    // Options are deliberately exempt: sell-to-open is a normal opening action there
-    // (premium selling), so a same-day STO+BTC must keep its recorded order.
+    // Two deliberate exemptions, both of which legitimately sell first:
+    //  • Options — sell-to-open is a normal opening action (premium selling), so a
+    //    same-day STO+BTC must keep its recorded order.
+    //  • Assignment/Exercise — when a spread breaches, the short leg is assigned first
+    //    (creating a stock position) and the long leg is exercised afterwards to close
+    //    it out. That order is real and must be preserved.
+    if (a.rowType !== 'Trade' || b.rowType !== 'Trade') return 0
     if (a.instrumentType !== 'Equity' || b.instrumentType !== 'Equity') return 0
     const aIsSell = (a._signedQty ?? 0) < 0 ? 1 : 0
     const bIsSell = (b._signedQty ?? 0) < 0 ? 1 : 0
@@ -195,14 +204,12 @@ function inferOpenClose(positionRows) {
     const pos = positions[key] ?? 0
     const qty = row._signedQty ?? 0
 
-    if (row.rowType === 'Trade') {
-      if (pos === 0 || Math.sign(pos) === Math.sign(qty)) {
-        row.openClose = 'Open'
-        row.action = qty > 0 ? 'BUY_TO_OPEN' : 'SELL_TO_OPEN'
-      } else {
-        row.openClose = 'Close'
-        row.action = qty > 0 ? 'BUY_TO_CLOSE' : 'SELL_TO_CLOSE'
-      }
+    if (pos === 0 || Math.sign(pos) === Math.sign(qty)) {
+      row.openClose = 'Open'
+      row.action = qty > 0 ? 'BUY_TO_OPEN' : 'SELL_TO_OPEN'
+    } else {
+      row.openClose = 'Close'
+      row.action = qty > 0 ? 'BUY_TO_CLOSE' : 'SELL_TO_CLOSE'
     }
     positions[key] = pos + qty
   }

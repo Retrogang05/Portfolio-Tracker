@@ -217,6 +217,7 @@ function tryDetectWheel(rows, underlying) {
   // rather than acquired via put assignment.
   const hasEquityPurchase = allTradeRows.some(r => r.instrumentType === 'Equity' && r.action === 'BUY_TO_OPEN')
 
+
   // A single short put is enough — the user always sells puts as wheel entries.
   // Standalone short-call-only positions need ≥ 2 legs OR clear stock ownership
   // (equity purchase) to avoid misclassifying one-off single calls as wheel cycles.
@@ -284,7 +285,10 @@ function tryDetectWheel(rows, underlying) {
   const usedEquityRows = new Set()
   const makeAssignment = (r) => {
     const isIBKREquity = r.instrumentType === 'Equity'
-    const callPut  = isIBKREquity ? (r.action === 'BUY_TO_OPEN' ? 'PUT' : 'CALL') : r.callPut
+    // Buying shares = a put was assigned to us; selling = a call was assigned away.
+    // Matched on BUY/SELL rather than the exact action, since position tracking may
+    // label it *_TO_CLOSE (e.g. an exercise covering an assigned short leg).
+    const callPut  = isIBKREquity ? (r.action.startsWith('BUY') ? 'PUT' : 'CALL') : r.callPut
     const strike   = isIBKREquity ? r.price : r.strike
     const eq       = isIBKREquity ? r
                    : equityRows.find(e => !usedEquityRows.has(e) && Math.abs(e.date - r.date) < 86400000 * 2) ?? null
@@ -292,10 +296,10 @@ function tryDetectWheel(rows, underlying) {
     return { callPut, strike, expiration: r.expiration ?? '', date: r.date, equity: eq }
   }
   const putAssignments  = assignRows.filter(r =>
-    r.callPut === 'PUT' || (r.instrumentType === 'Equity' && r.action === 'BUY_TO_OPEN')
+    r.callPut === 'PUT' || (r.instrumentType === 'Equity' && r.action.startsWith('BUY'))
   ).map(makeAssignment)
   const callAssignments = assignRows.filter(r =>
-    r.callPut === 'CALL' || (r.instrumentType === 'Equity' && r.action !== 'BUY_TO_OPEN')
+    r.callPut === 'CALL' || (r.instrumentType === 'Equity' && !r.action.startsWith('BUY'))
   ).map(makeAssignment)
 
   // Equity P&L only when we have both sides of the round-trip:
