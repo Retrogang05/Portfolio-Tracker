@@ -72,6 +72,7 @@ function mapRow(r, idx) {
       instrumentType: 'Equity',
       openClose: qty < 0 ? 'Close' : 'Open',
       quantity: Math.abs(qty), expiration: '', strike: 0, callPut: null,
+      _signedQty: qty,          // signed, so position tracking sees assigned shares
       price: Math.abs(price), commissions: comm, fees: 0,
       amount: net, description: desc, isExpiration: false,
     }
@@ -154,9 +155,15 @@ function consolidatePartialFills(rows) {
   return [...nonTradeRows, ...merged].sort((a, b) => a.date - b.date)
 }
 
-// FIFO position tracking: infers openClose + action from net position changes
-function inferOpenClose(tradeRows) {
-  const sorted = [...tradeRows].sort((a, b) => a.date - b.date)
+// FIFO position tracking: infers openClose + action from net position changes.
+//
+// Assignment/Exercise rows are fed in alongside Trade rows because they change the
+// share position too — shares delivered by a put assignment must be visible to the
+// tracker, otherwise a later sale of those shares looks like opening a short.
+// Their own openClose/action are already correct from mapRow and are left untouched;
+// they only contribute to the running position.
+function inferOpenClose(positionRows) {
+  const sorted = [...positionRows].sort((a, b) => a.date - b.date)
   const positions = {}
 
   for (const row of sorted) {
@@ -165,14 +172,16 @@ function inferOpenClose(tradeRows) {
       : `${row.underlying}|${row.expiration}|${row.strike}|${row.callPut}`
 
     const pos = positions[key] ?? 0
-    const qty = row._signedQty
+    const qty = row._signedQty ?? 0
 
-    if (pos === 0 || Math.sign(pos) === Math.sign(qty)) {
-      row.openClose = 'Open'
-      row.action = qty > 0 ? 'BUY_TO_OPEN' : 'SELL_TO_OPEN'
-    } else {
-      row.openClose = 'Close'
-      row.action = qty > 0 ? 'BUY_TO_CLOSE' : 'SELL_TO_CLOSE'
+    if (row.rowType === 'Trade') {
+      if (pos === 0 || Math.sign(pos) === Math.sign(qty)) {
+        row.openClose = 'Open'
+        row.action = qty > 0 ? 'BUY_TO_OPEN' : 'SELL_TO_OPEN'
+      } else {
+        row.openClose = 'Close'
+        row.action = qty > 0 ? 'BUY_TO_CLOSE' : 'SELL_TO_CLOSE'
+      }
     }
     positions[key] = pos + qty
   }
@@ -264,9 +273,13 @@ export function parseAllIBKR(file) {
           // so position tracking sees the consolidated quantities
           const consolidated = consolidatePartialFills(rows)
 
-          // Infer open/close for trade rows using position tracking
-          const tradeRows = consolidated.filter(r => r.rowType === 'Trade')
-          inferOpenClose(tradeRows)
+          // Infer open/close for trade rows using position tracking.
+          // Assignment/Exercise rows are included so shares they deliver are
+          // reflected in the running position (see inferOpenClose).
+          const positionRows = consolidated.filter(r =>
+            r.rowType === 'Trade' || r.rowType === 'Assignment' || r.rowType === 'Exercise'
+          )
+          inferOpenClose(positionRows)
 
           // Strip internal field
           consolidated.forEach(r => { delete r._signedQty })
