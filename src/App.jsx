@@ -78,6 +78,7 @@ function emptyPortfolio(idx) {
     overrides:      loadOverrides(idx),
     moneyMovements: [],
     capitalTags:    loadCapitalTags(idx),
+    swDetection:    [],     // Selfwealth: how each file's market was resolved
     equityData:     null,   // used by Tasty / IBKR
     equityDataAUS:  null,   // Selfwealth AUD market
     equityDataUS:   null,   // Selfwealth USD market
@@ -160,9 +161,25 @@ export default function App() {
         const equityDataUS  = buildEquityTrades(usRows)
         const hasAny = equityDataAUS.closedPositions.length > 0 || equityDataAUS.openPositions.length > 0 ||
                        equityDataUS.closedPositions.length  > 0 || equityDataUS.openPositions.length  > 0
+
+        // How each uploaded file's market was resolved, so a guess can be shown rather
+        // than silently filing a whole account under the wrong currency.
+        const seen = new Map()
+        for (const r of allRows) {
+          if (!r.sourceFile || seen.has(r.sourceFile)) continue
+          seen.set(r.sourceFile, {
+            file:       r.sourceFile,
+            currency:   r.currency ?? 'AUD',
+            source:     r.currencySource ?? 'default',
+            confidence: r.currencyConfidence ?? 'low',
+          })
+        }
+        const swDetection = [...seen.values()]
+
         updatePortfolio(idx, {
           rawTrades: [], trades: [], stats: null, wheels: [],
           equityData: null, equityDataAUS, equityDataUS,
+          swDetection,
           moneyMovements,
           loading: false,
           error: hasAny ? null : 'No trades found. Make sure this is a Selfwealth Cash Report CSV.',
@@ -916,6 +933,32 @@ export default function App() {
                     >
                       Stocks
                     </button>
+                  </div>
+                )}
+
+                {/* Market-detection summary — shows how each Selfwealth file was
+                    classified, and warns when it was a guess rather than a fact. */}
+                {isSelfwealth && p.swDetection?.length > 0 && (
+                  <div className="w-full order-last mt-2 flex flex-wrap gap-2">
+                    {p.swDetection.map((d, i) => {
+                      const weak = d.confidence !== 'high'
+                      return (
+                        <span
+                          key={i}
+                          title={`${d.file} → ${d.currency} (detected from ${d.source})`}
+                          className={`text-xs px-2 py-1 rounded border ${
+                            weak
+                              ? 'bg-amber-900/30 border-amber-700/50 text-amber-300'
+                              : 'bg-slate-800 border-slate-700 text-slate-400'
+                          }`}
+                        >
+                          {weak && <span className="mr-1">⚠</span>}
+                          <span className="font-mono">{d.currency}</span>
+                          <span className="opacity-70"> · {d.source}</span>
+                          <span className="opacity-50"> · {d.file.length > 34 ? '…' + d.file.slice(-31) : d.file}</span>
+                        </span>
+                      )
+                    })}
                   </div>
                 )}
 

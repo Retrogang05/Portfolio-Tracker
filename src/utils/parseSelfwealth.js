@@ -41,6 +41,63 @@ export function detectCurrencyFromContent(text) {
   return 'AUD'
 }
 
+// "Exchange Fees" is a US-market-only charge (SEC/FINRA fee, levied on sales).
+// Present → USD with certainty. Absent proves nothing: an AUD file has none, but so
+// does a USD file containing only buys.
+function hasExchangeFees(text) {
+  return /Order \d+: Exchange Fees /i.test(text)
+}
+
+// Ticker shape across the whole file. Individually a ticker says little — CAT is both
+// Catapult (ASX) and Caterpillar (US) — but the distribution separates the markets
+// cleanly: ASX ordinary codes are 3 characters, while US tickers are mostly 4.
+// Measured on this account: AU 861/861 three-char (0% four-char); US 87% four-char.
+// Digits inside a 3-char code (360, 4DX, A2M) are an ASX tell — rare in US tickers.
+function detectFromTickers(text) {
+  const tickers = [...text.matchAll(/Order \d+: (?:Buy|Sell) \d+ ([A-Z0-9.]+) @/gi)]
+    .map(m => m[1].toUpperCase())
+  if (tickers.length < 5) return null          // too little evidence to call
+
+  const long   = tickers.filter(t => t.length >= 4).length
+  const digity = tickers.filter(t => t.length <= 3 && /\d/.test(t)).length
+  const pctLong = long / tickers.length
+
+  if (pctLong >= 0.30) return { currency: 'USD', confidence: 'low', sample: tickers.length }
+  if (pctLong === 0 && digity > 0) return { currency: 'AUD', confidence: 'low', sample: tickers.length }
+  if (pctLong <= 0.02) return { currency: 'AUD', confidence: 'low', sample: tickers.length }
+  return null                                   // genuinely ambiguous — don't guess
+}
+
+/**
+ * Resolve which market a Selfwealth export belongs to, most reliable signal first.
+ *
+ *   1. filename marker  "(AU)" / "AUS" / "US"      — deterministic, user controlled
+ *   2. price prefix     "@ US$" / "@ A$"           — definitive, but only in exports
+ *                                                     from ~31 Jul 2026 onward
+ *   3. exchange fees    US-only charge             — definitive when present
+ *   4. ticker shape     distribution across file   — statistical, low confidence
+ *
+ * Returns { currency, source, confidence }. `confidence` is 'high' for 1-3 and 'low'
+ * for 4 or the bare default, so the UI can flag a guess instead of silently
+ * mis-filing a whole account — the failure mode that motivated this.
+ */
+export function resolveMarket(filename, text) {
+  const sample = typeof text === 'string' ? text : ''
+
+  const byName = detectCurrency(filename ?? '')
+  if (byName) return { currency: byName, source: 'filename', confidence: 'high' }
+
+  if (/@\s*US\$/i.test(sample)) return { currency: 'USD', source: 'price prefix', confidence: 'high' }
+  if (/@\s*A\$/i.test(sample))  return { currency: 'AUD', source: 'price prefix', confidence: 'high' }
+
+  if (hasExchangeFees(sample)) return { currency: 'USD', source: 'exchange fees', confidence: 'high' }
+
+  const byTicker = detectFromTickers(sample)
+  if (byTicker) return { currency: byTicker.currency, source: `ticker shape (${byTicker.sample} fills)`, confidence: 'low' }
+
+  return { currency: 'AUD', source: 'default', confidence: 'low' }
+}
+
 const parseNum = s => {
   if (!s || s === '') return 0
   return parseFloat(String(s).replace(/,/g, '')) || 0
@@ -233,11 +290,30 @@ export function parseCSVText(csvText, currency = 'USD') {
 }
 
 export async function parseSelfwealth(file) {
-  const fromName = detectCurrency(file?.name ?? '')
-  if (fromName) return _parseSelfwealth(file, fromName)
+  const name = file?.name ?? ''
 
-  // Filename has no AUS/US marker — read the text so the currency can be sniffed
-  // from the content instead of silently defaulting to AUD.
+  // A filename marker is decisive and needs no content, so keep the File-object path
+  // (Papa streams it directly, which is cheaper for large exports).
+  const fromName = detectCurrency(name)
+  if (fromName) {
+    const rows = await _parseSelfwealth(file, fromName)
+    return tagDetection(rows, { currency: fromName, source: 'filename', confidence: 'high' }, name)
+  }
+
+  // No marker — read the text so the market can be resolved from the content.
   const text = typeof file === 'string' ? file : await file.text()
-  return _parseSelfwealth(text, detectCurrencyFromContent(text))
+  const detected = resolveMarket(name, text)
+  const rows = await _parseSelfwealth(text, detected.currency)
+  return tagDetection(rows, detected, name)
+}
+
+// Record how the market was resolved on every row, so the UI can show it and warn
+// when the answer was a guess rather than a fact.
+function tagDetection(rows, detected, fileName) {
+  for (const r of rows) {
+    r.currencySource     = detected.source
+    r.currencyConfidence = detected.confidence
+    r.sourceFile         = fileName
+  }
+  return rows
 }
