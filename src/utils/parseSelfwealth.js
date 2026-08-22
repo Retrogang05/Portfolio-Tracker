@@ -14,25 +14,30 @@ import Papa from 'papaparse'
 // Multiple partial fills for the same Order # are consolidated into one
 // Trade row with a weighted-average price and summed qty/amount/fees.
 
-// Detect currency from filename: "... AUS.csv" → AUD, "... US.csv" → USD
+// Detect currency from filename: "... AUS.csv" / "... (AU).csv" → AUD, "... US.csv" → USD
 // Exported for testing.
 export function detectCurrency(filename) {
-  if (/\bAUS\b/i.test(filename)) return 'AUD'
-  if (/\bUS\b/i.test(filename))  return 'USD'
+  // AU / AUS must be tested first — a bare "US" test would not match either, but
+  // keeping the order explicit guards against future marker variants.
+  if (/\bAUS?\b/i.test(filename)) return 'AUD'
+  if (/\bUS\b/i.test(filename))   return 'USD'
   return null   // ambiguous — caller falls back to content sniffing
 }
 
 // Fallback when the filename carries no market marker (newer Selfwealth exports are
-// named "CashReport_<name>_<from>_<to>.csv" with no AUS/US suffix). Selfwealth writes
-// an explicit currency prefix on newer fills — "@ US$10.405" / "@ A$3.51" — so read it
-// off the content. Defaults to AUD, matching the previous behaviour.
+// named "CashReport_<name>_<from>_<to>.csv" with no AUS/US suffix).
+//
+// The only trustworthy signal is the currency prefix Selfwealth started writing on
+// fills in Jul 2026 — "@ US$10.405" / "@ A$3.51". Deliberately NOT keyed off the
+// "Transfer 72,667.00 AUD TO USD" conversion lines: those name the transfer's
+// direction, not the account's currency, and the identical line appears in BOTH
+// files — as a debit in the AUD account and a credit in the USD one.
+//
+// Defaults to AUD, matching the long-standing behaviour for unmarked files.
 export function detectCurrencyFromContent(text) {
   const sample = typeof text === 'string' ? text : ''
   if (/@\s*US\$/i.test(sample)) return 'USD'
   if (/@\s*A\$/i.test(sample))  return 'AUD'
-  // Currency-conversion lines name the destination, e.g. "Transfer 72,667.00 AUD TO USD"
-  const xfer = sample.match(/Transfer\s[\d,.]+\s(AUD|USD)\sTO\s(AUD|USD)/i)
-  if (xfer) return xfer[2].toUpperCase()
   return 'AUD'
 }
 
