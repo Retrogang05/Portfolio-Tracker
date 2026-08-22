@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { parseCSV, parseAllCSV } from '../parseTastyworks.js'
+import { fixture } from './fixtures.js'
 
 // ── Inline minimal CSV ─────────────────────────────────────────────────────────
 
@@ -79,9 +80,9 @@ describe('parseTastyworks (inline)', () => {
 
 // ── Real-file smoke tests ─────────────────────────────────────────────────────
 
-const REAL_TT_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/tastytrade_transactions_history_x6AB16463_251231_to_260620.csv'
+const REAL_TT_PATH = fixture('Tasty', /^tastytrade_transactions_history.*\.csv$/i)
 
-describe('parseTastyworks (real file)', () => {
+describe.skipIf(!REAL_TT_PATH)('parseTastyworks (real file)', () => {
 
   it('parses without throwing', async () => {
     const csvText = readFileSync(REAL_TT_PATH, 'utf8')

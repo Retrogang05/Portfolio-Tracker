@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { parseComsec } from '../parseComsec.js'
+import { fixture } from './fixtures.js'
 
 // ── Inline minimal CSV ─────────────────────────────────────────────────────────
 
@@ -97,9 +98,9 @@ describe('parseComsec (inline)', () => {
 
 // ── Real-file smoke tests ─────────────────────────────────────────────────────
 
-const REAL_CS_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/COMSEC Transactions_4437691_07012019_24052026.csv'
+const REAL_CS_PATH = fixture('Comsec', /^COMSEC Transactions.*\.csv$/i)
 
-describe('parseComsec (real file)', () => {
+describe.skipIf(!REAL_CS_PATH)('parseComsec (real file)', () => {
 
   it('parses without throwing', async () => {
     const text = readFileSync(REAL_CS_PATH, 'utf8')

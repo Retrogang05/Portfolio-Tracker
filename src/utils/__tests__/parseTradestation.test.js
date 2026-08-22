@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { parseCSVText } from '../parseTradestation.js'
+import { fixture } from './fixtures.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -137,9 +138,9 @@ describe('parseTradestation (new Activity Report format)', () => {
 
 // ── Real-file smoke tests ─────────────────────────────────────────────────────
 
-const REAL_TS_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/trades_activity_12059846_29MAY2026_28JUN2026.csv'
+const REAL_TS_PATH = fixture('TradeStation', /^trades_activity.*\.csv$/i)
 
-describe('parseTradestation (real Activity Report file)', () => {
+describe.skipIf(!REAL_TS_PATH)('parseTradestation (real Activity Report file)', () => {
 
   it('parses without throwing', async () => {
     const text = readFileSync(REAL_TS_PATH, 'utf8')
@@ -147,11 +148,17 @@ describe('parseTradestation (real Activity Report file)', () => {
     expect(rows.length).toBeGreaterThan(0)
   })
 
-  it('produces 67 option rows from 67 raw rows', async () => {
+  // Deliberately not asserting an exact row count: the fixture is whichever export
+  // is on disk, and its date range changes with every re-download. Assert the
+  // invariants that must hold for ANY export instead.
+  it('every non-expiration row is a well-formed option row', async () => {
     const text  = readFileSync(REAL_TS_PATH, 'utf8')
     const rows  = await parseCSVText(text)
     const trades = rows.filter(r => !r.isExpiration)
-    expect(trades).toHaveLength(67)
+    expect(trades.length).toBeGreaterThan(0)
+    expect(trades.every(r => r.callPut === 'CALL' || r.callPut === 'PUT')).toBe(true)
+    expect(trades.every(r => r.quantity > 0)).toBe(true)
+    expect(trades.every(r => r.openClose === 'Open' || r.openClose === 'Close')).toBe(true)
   })
 
   it('generates synthetic expirations for past-expiry open positions', async () => {
@@ -172,14 +179,17 @@ describe('parseTradestation (real Activity Report file)', () => {
     expect(rows.every(r => typeof r.underlying === 'string' && r.underlying.length > 0)).toBe(true)
   })
 
-  it('produces 33 closed trades through buildTrades', async () => {
+  it('runs end-to-end through buildTrades producing coherent closed trades', async () => {
     const { buildTrades } = await import('../calculatePnL.js')
     const { tagRowsWithStrategy } = await import('../identifyStrategy.js')
     const text   = readFileSync(REAL_TS_PATH, 'utf8')
     const rows   = await parseCSVText(text)
     const tagged = tagRowsWithStrategy(rows)
     const { closedTrades } = buildTrades(tagged)
-    expect(closedTrades).toHaveLength(33)
+    expect(closedTrades.length).toBeGreaterThan(0)
+    expect(closedTrades.every(t => t.strategyName)).toBe(true)
+    expect(closedTrades.every(t => Number.isFinite(t.pnl))).toBe(true)
+    expect(closedTrades.every(t => t.closeDate >= t.openDate)).toBe(true)
   })
 
 })

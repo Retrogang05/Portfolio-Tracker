@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { parseCSVText, parseSelfwealth } from '../parseSelfwealth.js'
+import { parseCSVText, parseSelfwealth, detectCurrency, resolveMarket } from '../parseSelfwealth.js'
+import { fixture } from './fixtures.js'
 
 // ── Inline minimal CSV ─────────────────────────────────────────────────────────
 
@@ -83,10 +84,10 @@ describe('parseSelfwealth (inline)', () => {
 
 // ── Real-file smoke tests ─────────────────────────────────────────────────────
 
-const REAL_US_PATH  = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/CashReport-Divya Mahajan2023-01-01-2026-06-21 US.csv'
-const REAL_AUS_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/CashReport-Divya Mahajan2025-07-01-2026-06-30 AUS.csv'
+const REAL_US_PATH  = fixture('SelfWealth', /Divya.*\(US\)\.csv$/i)
+const REAL_AUS_PATH = fixture('SelfWealth', /Divya.*\(AU\)\.csv$/i)
 
-describe('parseSelfwealth (real US file)', () => {
+describe.skipIf(!REAL_US_PATH)('parseSelfwealth (real US file)', () => {
 
   it('parses without throwing', async () => {
     const text = readFileSync(REAL_US_PATH, 'utf8')
@@ -113,7 +114,7 @@ describe('parseSelfwealth (real US file)', () => {
 
 })
 
-describe('parseSelfwealth (real AUS file)', () => {
+describe.skipIf(!REAL_AUS_PATH)('parseSelfwealth (real AUS file)', () => {
 
   it('parses without throwing', async () => {
     const text = readFileSync(REAL_AUS_PATH, 'utf8')
@@ -127,6 +128,104 @@ describe('parseSelfwealth (real AUS file)', () => {
     const trades = rows.filter(r => r.rowType === 'Trade')
     expect(trades.length).toBeGreaterThan(0)
     expect(trades.every(r => r.currency === 'AUD')).toBe(true)
+  })
+
+})
+
+// ── Market detection & format regressions ─────────────────────────────────────
+//
+// Both bugs these cover shipped to a live account. Neither had coverage, because
+// the real-file paths had rotted to ENOENT and the suite read as "failing" rather
+// than "not running".
+
+const swFill = (order, side, qty, sym, price) =>
+  `2026-08-05 05:16:02,"Order ${order}: ${side} ${qty} ${sym} @ ${price}",1277.00,,137167.00`
+
+describe('parseSelfwealth — price format', () => {
+
+  // Selfwealth began writing "@ US$10.405" on 31 Jul 2026. The fill regex required a
+  // bare "@ $", so newer fills fell through to the money-movement branch and showed up
+  // as Capital Introduced / Withdrawal instead of trades.
+  it('parses fills with a US$ currency prefix', async () => {
+    const rows = await parseCSVText(csv(swFill(1697, 'Sell', 100, 'SNXX', 'US$12.77')), 'USD')
+    const trades = rows.filter(r => r.rowType === 'Trade')
+    expect(trades).toHaveLength(1)
+    expect(trades[0].symbol).toBe('SNXX')
+    expect(trades[0].price).toBeCloseTo(12.77, 4)
+  })
+
+  it('parses fills with an A$ prefix and still parses the bare $ form', async () => {
+    const withA = await parseCSVText(csv(swFill(1, 'Buy', 10, 'CBA', 'A$5.00')), 'AUD')
+    expect(withA.filter(r => r.rowType === 'Trade')).toHaveLength(1)
+    const bare  = await parseCSVText(csv(swFill(2, 'Buy', 10, 'CBA', '$5.00')), 'AUD')
+    expect(bare.filter(r => r.rowType === 'Trade')).toHaveLength(1)
+  })
+
+  it('does not misfile a prefixed fill as a money movement', async () => {
+    const rows = await parseCSVText(csv(swFill(1697, 'Sell', 100, 'SNXX', 'US$12.77')), 'USD')
+    expect(rows.filter(r => r.rowType === 'MoneyMovement')).toHaveLength(0)
+  })
+
+})
+
+describe('parseSelfwealth — market detection', () => {
+
+  it('layer 1: reads the marker out of the filename', () => {
+    expect(detectCurrency('CashReport 2026 (AU).csv')).toBe('AUD')
+    expect(detectCurrency('CashReport 2026 AUS.csv')).toBe('AUD')
+    expect(detectCurrency('CashReport 2026 US.csv')).toBe('USD')
+    expect(detectCurrency('CashReport_2020_2026.csv')).toBeNull()
+  })
+
+  it('layer 2: falls back to the price prefix, marked high confidence', () => {
+    const r = resolveMarket('unmarked.csv', csv(swFill(1, 'Sell', 100, 'SNXX', 'US$12.77')))
+    expect(r.currency).toBe('USD')
+    expect(r.confidence).toBe('high')
+  })
+
+  it('layer 3: falls back to Exchange Fees, a US-only charge', () => {
+    const text = csv(
+      swFill(1, 'Sell', 100, 'AAPL', '$252.84'),
+      '2026-08-05 05:16:08,Order 1: Exchange Fees SELL AAPL,,0.24,142266.08',
+    )
+    const r = resolveMarket('unmarked.csv', text)
+    expect(r.currency).toBe('USD')
+    expect(r.confidence).toBe('high')
+  })
+
+  it('layer 4: falls back to ticker shape, marked LOW confidence', () => {
+    const asx = csv(...['BHP','CSL','WTC','A2M','4DX','CXO'].map((t,i) => swFill(i, 'Buy', 10, t, '$5.00')))
+    const au  = resolveMarket('unmarked.csv', asx)
+    expect(au.currency).toBe('AUD')
+    expect(au.confidence).toBe('low')
+
+    const us = resolveMarket('unmarked.csv',
+      csv(...['AAPL','MSFT','NVDA','TSLA','GOOG','AMZN'].map((t,i) => swFill(i, 'Buy', 10, t, '$5.00'))))
+    expect(us.currency).toBe('USD')
+    expect(us.confidence).toBe('low')
+  })
+
+  // Regression: an AUD account's "Transfer 72,667.00 AUD TO USD" lines name the
+  // transfer's direction, not the account's currency, and the identical line appears
+  // in the USD export too. Keying off them filed the whole AUD account as USD.
+  it('ignores AUD->USD transfer lines when resolving the market', () => {
+    const text = csv(
+      '2024-05-23 08:24:03,"Transfer 72,667.00 AUD TO USD. 1 AUD = 0.655559 USD",47637.51,,47637.51',
+      ...['BHP','CSL','WTC','A2M','4DX','CXO'].map((t,i) => swFill(i, 'Buy', 10, t, '$5.00')),
+    )
+    expect(resolveMarket('unmarked.csv', text).currency).toBe('AUD')
+  })
+
+  it('a filename marker outranks conflicting content', () => {
+    const usLooking = csv(swFill(1, 'Sell', 100, 'SNXX', 'US$12.77'))
+    expect(resolveMarket('CashReport (AU).csv', usLooking).currency).toBe('AUD')
+  })
+
+  it('defaults to AUD at low confidence when there is no evidence at all', () => {
+    // A dormant account's export has no fills, so layers 2-4 are all blind.
+    const r = resolveMarket('unmarked.csv', csv('2026-07-27 06:32:30,THE A2 MILK COMP 001359495370,1174.36,,1357.87'))
+    expect(r.currency).toBe('AUD')
+    expect(r.confidence).toBe('low')
   })
 
 })

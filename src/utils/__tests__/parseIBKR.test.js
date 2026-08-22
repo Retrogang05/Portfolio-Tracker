@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { parseAllIBKR } from '../parseIBKR.js'
+import { fixture } from './fixtures.js'
 
 // IBKR CSV is a multi-section file — hard to write inline fixtures meaningfully.
 // These tests use the real export file.
 
-const REAL_IBKR_PATH = '/Users/harrysingh/Documents/Claude/Portfolio Transactions/U24130472.TRANSACTIONS.1Y.csv'
+const REAL_IBKR_PATH = fixture('IBKR', /^U24130472\..*\.csv$/i)
 
-describe('parseIBKR (real file)', () => {
+describe.skipIf(!REAL_IBKR_PATH)('parseIBKR (real file)', () => {
 
   it('parses without throwing', async () => {
     const csvText = readFileSync(REAL_IBKR_PATH, 'utf8')
