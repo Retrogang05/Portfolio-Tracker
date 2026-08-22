@@ -15,10 +15,25 @@ import Papa from 'papaparse'
 // Trade row with a weighted-average price and summed qty/amount/fees.
 
 // Detect currency from filename: "... AUS.csv" → AUD, "... US.csv" → USD
-function detectCurrency(filename) {
+// Exported for testing.
+export function detectCurrency(filename) {
   if (/\bAUS\b/i.test(filename)) return 'AUD'
   if (/\bUS\b/i.test(filename))  return 'USD'
-  return 'AUD'  // default
+  return null   // ambiguous — caller falls back to content sniffing
+}
+
+// Fallback when the filename carries no market marker (newer Selfwealth exports are
+// named "CashReport_<name>_<from>_<to>.csv" with no AUS/US suffix). Selfwealth writes
+// an explicit currency prefix on newer fills — "@ US$10.405" / "@ A$3.51" — so read it
+// off the content. Defaults to AUD, matching the previous behaviour.
+export function detectCurrencyFromContent(text) {
+  const sample = typeof text === 'string' ? text : ''
+  if (/@\s*US\$/i.test(sample)) return 'USD'
+  if (/@\s*A\$/i.test(sample))  return 'AUD'
+  // Currency-conversion lines name the destination, e.g. "Transfer 72,667.00 AUD TO USD"
+  const xfer = sample.match(/Transfer\s[\d,.]+\s(AUD|USD)\sTO\s(AUD|USD)/i)
+  if (xfer) return xfer[2].toUpperCase()
+  return 'AUD'
 }
 
 const parseNum = s => {
@@ -37,7 +52,12 @@ function parseComment(comment) {
   const c = (comment || '').trim()
 
   // Trade fill: "Order 1449: Sell 737 SXE @ $3.515"
-  const fillM = c.match(/^Order (\d+): (Buy|Sell) (\d+) (\S+) @ \$(.+)$/i)
+  //
+  // Selfwealth began prefixing the price with a currency code on 31 Jul 2026:
+  // "Order 1696: Buy 200 SNXX @ US$10.405". The prefix is optional so both the old
+  // and new exports parse. Without this, newer fills fall through to the money-movement
+  // branch and surface as Capital Introduced / Withdrawal instead of trades.
+  const fillM = c.match(/^Order (\d+): (Buy|Sell) (\d+) (\S+) @ [A-Z]{0,3}\$(.+)$/i)
   if (fillM) return {
     type: 'fill', orderId: fillM[1],
     action: fillM[2].toUpperCase(),
@@ -207,6 +227,12 @@ export function parseCSVText(csvText, currency = 'USD') {
   return _parseSelfwealth(csvText, currency)
 }
 
-export function parseSelfwealth(file) {
-  return _parseSelfwealth(file, detectCurrency(file.name))
+export async function parseSelfwealth(file) {
+  const fromName = detectCurrency(file?.name ?? '')
+  if (fromName) return _parseSelfwealth(file, fromName)
+
+  // Filename has no AUS/US marker — read the text so the currency can be sniffed
+  // from the content instead of silently defaulting to AUD.
+  const text = typeof file === 'string' ? file : await file.text()
+  return _parseSelfwealth(text, detectCurrencyFromContent(text))
 }
