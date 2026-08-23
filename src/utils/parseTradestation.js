@@ -33,6 +33,16 @@ function parseSymbol(symbol) {
   }
 }
 
+// TradeStation appends a per-leg suffix to the Order ID — "1287151306LEG1",
+// "1287151306LEG2" — so every leg of one order carries a DIFFERENT id. Strategy
+// detection groups by order id, so each leg of a spread was classified as a
+// standalone single-leg trade: an Iron Condor showed up as four separate long/short
+// calls and puts. Strip the suffix so the id identifies the ORDER, which is what the
+// field is for; the leg is already identified by its symbol.
+function normaliseOrderId(raw) {
+  return (raw || '').trim().replace(/LEG\d+$/i, '')
+}
+
 // "06/16/2026" → Date (MM/DD/YYYY, local midnight)
 function parseDate(dateStr) {
   if (!dateStr) return new Date(NaN)
@@ -68,7 +78,7 @@ function mapEquityRow(r, symbol, date) {
     rowType:        'Trade',
     date,
     timestampSec:   Math.floor(date.getTime() / 1000).toString(),
-    orderId:        (r['Order ID'] || '').trim(),
+    orderId:        normaliseOrderId(r['Order ID']),
     subType:        side.charAt(0) + side.slice(1).toLowerCase(),
     action:         spec.action,
     symbol:         ticker,
@@ -115,7 +125,7 @@ function mapRow(r) {
     rowType:        'Trade',
     date,
     timestampSec:   Math.floor(date.getTime() / 1000).toString(),
-    orderId:        (r['Order ID'] || '').trim(),
+    orderId:        normaliseOrderId(r['Order ID']),
     subType:        side,
     action,
     symbol,

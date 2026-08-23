@@ -330,3 +330,43 @@ describe('parseTradestation — assignment recovery', () => {
   })
 
 })
+
+// ── Order ID grouping ─────────────────────────────────────────────────────────
+
+describe('parseTradestation — multi-leg order grouping', () => {
+
+  // TradeStation appends LEG1/LEG2/... to the Order ID, giving every leg of one order
+  // a different id. Strategy detection groups by order id, so each leg of a spread was
+  // classified as a standalone single-leg trade — an Iron Condor appeared as four
+  // separate long/short calls and puts, and the strategy breakdown was meaningless.
+  it('strips the per-leg suffix so one order has one id', async () => {
+    const rows = await parseCSVText(ts(
+      `"08/10/2026","CSCO 260814P113","172!!W#$2","","-2.00","$1.26","$252.00","-$3.00","-$0.06","$248.94","1295298252LEG2      "`,
+      `"08/10/2026","CSCO 260814P109","172!!W!}2","","2.00","$0.63","-$126.00","-$3.00","-$0.04","-$129.04","1295298252LEG1      "`,
+    ))
+    // both legs are past expiry with no close, so synthetic expirations are added too
+    const opens = rows.filter(r => !r.isExpiration)
+    expect(opens).toHaveLength(2)
+    expect(new Set(opens.map(r => r.orderId)).size).toBe(1)
+    expect(opens[0].orderId).toBe('1295298252')
+  })
+
+  it('classifies the legs as one spread rather than two single-leg trades', async () => {
+    const { tagRowsWithStrategy } = await import('../identifyStrategy.js')
+    const rows = await parseCSVText(ts(
+      `"08/10/2026","CSCO 260814P113","172!!W#$2","","-2.00","$1.26","$252.00","-$3.00","-$0.06","$248.94","1295298252LEG2      "`,
+      `"08/10/2026","CSCO 260814P109","172!!W!}2","","2.00","$0.63","-$126.00","-$3.00","-$0.04","-$129.04","1295298252LEG1      "`,
+    ))
+    const tagged = tagRowsWithStrategy(rows)
+    const names = new Set(tagged.filter(r => r.strategyName).map(r => r.strategyName))
+    expect(names).toEqual(new Set(['Bull Put Spread']))
+  })
+
+  it('leaves an order id without a leg suffix untouched', async () => {
+    const rows = await parseCSVText(ts(
+      share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1298811437' }),
+    ))
+    expect(rows[0].orderId).toBe('1298811437')
+  })
+
+})
