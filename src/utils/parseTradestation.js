@@ -42,13 +42,59 @@ function parseDate(dateStr) {
   return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10))
 }
 
+// Equity (share) rows carry a bare padded ticker — "FIG   " — rather than an option
+// symbol, a real numeric CUSIP, and an explicit Side. Unlike IBKR, direction never has
+// to be inferred from a running position: TradeStation states it outright.
+//   Buy   → open a long        Sell  → close a long
+//   Short → open a short       Cover → close a short
+const EQUITY_SIDES = {
+  BUY:   { openClose: 'Open',  action: 'BUY_TO_OPEN'   },
+  SELL:  { openClose: 'Close', action: 'SELL_TO_CLOSE' },
+  SHORT: { openClose: 'Open',  action: 'SELL_TO_OPEN'  },
+  COVER: { openClose: 'Close', action: 'BUY_TO_CLOSE'  },
+}
+
+function mapEquityRow(r, symbol, date) {
+  const side = (r['Side'] || '').trim().toUpperCase()
+  const spec = EQUITY_SIDES[side]
+  if (!spec) return null   // not a share trade we understand
+
+  const ticker = symbol.trim()
+  if (!/^[A-Z.]+$/.test(ticker)) return null
+
+  const net = parseNum(r['Net Amount'])   // already signed, net of all fees
+
+  return {
+    rowType:        'Trade',
+    date,
+    timestampSec:   Math.floor(date.getTime() / 1000).toString(),
+    orderId:        (r['Order ID'] || '').trim(),
+    subType:        side.charAt(0) + side.slice(1).toLowerCase(),
+    action:         spec.action,
+    symbol:         ticker,
+    underlying:     ticker,
+    instrumentType: 'Equity',
+    openClose:      spec.openClose,
+    quantity:       Math.abs(parseNum(r['Quantity'])),
+    expiration:     '',
+    strike:         0,
+    callPut:        null,
+    price:          Math.abs(parseNum(r['Price'])),
+    commissions:    parseNum(r['Commission']),
+    fees:           parseNum(r['Other Fees']),
+    amount:         net,
+    description:    `${side.charAt(0) + side.slice(1).toLowerCase()} ${ticker}`,
+    isExpiration:   false,
+  }
+}
+
 function mapRow(r) {
   const symbol  = (r['Symbol']   || '').trim()
-  const optInfo = parseSymbol(symbol)
-  if (!optInfo) return null   // skip non-option rows
-
   const date = parseDate((r['Date'] || '').trim())
   if (isNaN(date)) return null
+
+  const optInfo = parseSymbol(symbol)
+  if (!optInfo) return mapEquityRow(r, symbol, date)
 
   const side   = (r['Side'] || '').trim()   // '', 'SellToClose', 'BuyToClose'
   const rawQty = parseNum(r['Quantity'])     // signed: positive=buy, negative=sell
@@ -98,7 +144,10 @@ function addSyntheticExpirations(rows) {
   const net = {}
   const openRows = {}
 
-  for (const r of [...rows].sort((a, b) => a.date - b.date)) {
+  // Options only — share rows have no expiry to run past.
+  const optionRows = rows.filter(r => r.callPut != null)
+
+  for (const r of [...optionRows].sort((a, b) => a.date - b.date)) {
     const k = `${r.underlying}|${r.expiration}|${r.strike}|${r.callPut}`
     if (net[k] === undefined) net[k] = 0
     // BUY actions add to position; SELL actions subtract
@@ -156,7 +205,9 @@ function _parsePapaResult({ data }, resolve, reject) {
       .filter(Boolean)
 
     const withExp = addSyntheticExpirations(rows)
-    console.log('[TS] parsed', data.length - headerIdx - 1, 'raw rows →', rows.length, 'option rows')
+    console.log('[TS] parsed', data.length - headerIdx - 1, 'raw rows →',
+                rows.filter(r => r.callPut != null).length, 'option rows,',
+                rows.filter(r => r.instrumentType === 'Equity').length, 'share rows')
     console.log('[TS] opens:', rows.filter(r => r.openClose === 'Open').length,
                 'closes:', rows.filter(r => r.openClose === 'Close').length)
     console.log('[TS] expirations:', withExp.filter(r => r.isExpiration).length)

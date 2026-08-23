@@ -13,14 +13,14 @@ function fmtPrice(n) {
   return `$${n.toFixed(2)}`
 }
 
-export default function StockOpenPositions({ openPositions = [], totalOpenCost = 0, currency = 'USD' }) {
+export default function StockOpenPositions({ openPositions = [], totalOpenCost = 0, currency = 'USD', unmatchedCloses = [] }) {
   const fmtAmt = currency === 'INR' ? fmtINR : fmt
   // Money figures settle in the account's base currency, which may differ from the
   // currency a foreign holding is quoted in — label it so the two aren't confused.
   const cur = currency || null
   const [page, setPage] = useState(0)
 
-  if (!openPositions.length) return null
+  if (!openPositions.length && !unmatchedCloses.length) return null
 
   // Show the quoted-price column only when some holding is quoted in a currency other
   // than the account base — that price excludes fees and FX, so it is what you compare
@@ -47,6 +47,28 @@ export default function StockOpenPositions({ openPositions = [], totalOpenCost =
           <p className="text-slate-200 font-bold text-lg">{fmtAmt(totalOpenCost)}</p>
         </div>
       </div>
+
+      {unmatchedCloses.length > 0 && (
+        <div className="mb-4 rounded-lg border border-amber-700/50 bg-amber-900/20 px-4 py-3">
+          <p className="text-amber-300 text-sm font-medium">
+            ⚠ {unmatchedCloses.length} sale{unmatchedCloses.length > 1 ? 's' : ''} with no purchase on record
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            These shares were sold but never bought in this data, so there is no cost basis and
+            their P&amp;L is excluded rather than counted at zero cost. Usually means shares
+            transferred in from another broker — a transfer carries the position but appears in
+            no trade report. Any holding still open from such a transfer is also missing below.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {unmatchedCloses.map((u, i) => (
+              <span key={i} className="text-xs px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                <span className="font-mono font-semibold">{u.symbol}</span>
+                <span className="opacity-70"> · {u.quantity} shares · {fmtDate(u.date)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

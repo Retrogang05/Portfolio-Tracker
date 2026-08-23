@@ -151,14 +151,35 @@ describe.skipIf(!REAL_TS_PATH)('parseTradestation (real Activity Report file)', 
   // Deliberately not asserting an exact row count: the fixture is whichever export
   // is on disk, and its date range changes with every re-download. Assert the
   // invariants that must hold for ANY export instead.
-  it('every non-expiration row is a well-formed option row', async () => {
+  it('every non-expiration row is a well-formed option or share row', async () => {
     const text  = readFileSync(REAL_TS_PATH, 'utf8')
     const rows  = await parseCSVText(text)
     const trades = rows.filter(r => !r.isExpiration)
     expect(trades.length).toBeGreaterThan(0)
-    expect(trades.every(r => r.callPut === 'CALL' || r.callPut === 'PUT')).toBe(true)
     expect(trades.every(r => r.quantity > 0)).toBe(true)
     expect(trades.every(r => r.openClose === 'Open' || r.openClose === 'Close')).toBe(true)
+
+    // The report mixes options and shares; each must be well-formed in its own way.
+    const options = trades.filter(r => r.instrumentType === 'Equity Option')
+    const shares  = trades.filter(r => r.instrumentType === 'Equity')
+    expect(options.length + shares.length).toBe(trades.length)
+    expect(options.length).toBeGreaterThan(0)
+    expect(options.every(r => r.callPut === 'CALL' || r.callPut === 'PUT')).toBe(true)
+    expect(options.every(r => r.expiration && r.strike > 0)).toBe(true)
+    expect(shares.every(r => r.callPut === null && r.strike === 0)).toBe(true)
+    expect(shares.every(r => /^[A-Z.]+$/.test(r.underlying))).toBe(true)
+  })
+
+  it('reads share trades, including assignment deliveries', async () => {
+    const text   = readFileSync(REAL_TS_PATH, 'utf8')
+    const rows   = await parseCSVText(text)
+    const shares = rows.filter(r => r.instrumentType === 'Equity')
+    expect(shares.length).toBeGreaterThan(0)
+    // Direction comes from TradeStation's explicit Side, never inferred
+    expect(shares.every(r => ['BUY_TO_OPEN','SELL_TO_CLOSE','SELL_TO_OPEN','BUY_TO_CLOSE'].includes(r.action))).toBe(true)
+    // Buys cost money, sells raise it
+    expect(shares.filter(r => r.action.startsWith('BUY')).every(r => r.amount <= 0)).toBe(true)
+    expect(shares.filter(r => r.action.startsWith('SELL')).every(r => r.amount >= 0)).toBe(true)
   })
 
   it('generates synthetic expirations for past-expiry open positions', async () => {

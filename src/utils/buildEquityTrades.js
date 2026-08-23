@@ -96,6 +96,13 @@ export function buildEquityTrades(allRows) {
 
   const closedPositions = []
 
+  // Closes that ran out of matching opens. Their P&L cannot be computed — there is no
+  // cost basis — so they are excluded from realised P&L rather than counted at zero
+  // cost. Reported so the omission is visible instead of silent: it means history is
+  // missing, typically shares transferred in from another broker (an ACAT transfer
+  // carries the position but appears in no trade report).
+  const unmatchedCloses = []
+
   for (const c of closes) {
     const k = c.underlying
     const queue = openMap[k] || []
@@ -164,6 +171,17 @@ export function buildEquityTrades(allRows) {
       remaining -= matched
       if (open.remainingQty <= 0) queue.shift()
     }
+
+    if (remaining > 0.0001) {
+      unmatchedCloses.push({
+        symbol:    c.underlying,
+        date:      c.date,
+        quantity:  remaining,
+        // Pro-rate the cash to the portion we could not match
+        amount:    (c.amount ?? 0) * (remaining / c.quantity),
+        currency:  c.currency ?? null,
+      })
+    }
   }
 
   // Remaining unmatched opens = current open positions
@@ -212,5 +230,8 @@ export function buildEquityTrades(allRows) {
   // Settlement currency all money figures above are expressed in.
   const baseCurrency = equityRows.find(r => r.currency)?.currency ?? null
 
-  return { closedPositions, openPositions, totalRealizedPnL, totalOpenCost, stats, baseCurrency }
+  return {
+    closedPositions, openPositions, totalRealizedPnL, totalOpenCost, stats,
+    baseCurrency, unmatchedCloses,
+  }
 }

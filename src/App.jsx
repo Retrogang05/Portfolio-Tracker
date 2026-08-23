@@ -1124,6 +1124,7 @@ export default function App() {
                       openPositions={activeEquityDataDisplay.openPositions}
                       totalOpenCost={activeEquityDataDisplay.totalOpenCost}
                       currency={activeCurrency ?? activeEquityDataDisplay.baseCurrency ?? 'USD'}
+                      unmatchedCloses={activeEquityDataDisplay.unmatchedCloses ?? []}
                     />
                   </Collapsible>
 
