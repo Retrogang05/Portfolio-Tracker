@@ -172,28 +172,31 @@ function consolidatePartialFills(rows) {
 //    the long leg's exercise closes out later (sometimes days later, once the market
 //    reopens). Marking both legs Close leaves the pair unmatchable and silently drops
 //    the trade's P&L entirely.
-function inferOpenClose(positionRows) {
-  const sorted = [...positionRows].sort((a, b) => {
-    const byDate = a.date - b.date
-    if (byDate !== 0) return byDate
+// Same-day ordering rank. IBKR timestamps are date-only and the export lists rows
+// newest-first, so a same-day equity buy+sell pair arrives sell-first. Read in that
+// order it looks like opening a short — impossible in a cash account, which must own
+// shares before selling them. Ranking equity sells last puts acquisitions first.
+//
+// Everything else ranks 0 and so keeps its recorded order, which matters twice:
+//  • Options — sell-to-open is a normal opening action (premium selling), so a
+//    same-day STO+BTC must stay as recorded.
+//  • Assignment/Exercise — when a spread breaches, the short leg is assigned first
+//    (creating a stock position) and the long leg is exercised afterwards to close it.
+//
+// This is a rank rather than a pairwise special-case on purpose. Comparing only
+// equity-trade pairs and returning 0 for everything else is NOT transitive: with an
+// option row O at the same date, cmp(buy,O)=0 and cmp(O,sell)=0 while cmp(buy,sell)<0,
+// which lets the sort leave the buy after the sell and silently defeats the rule.
+function sameDayRank(row) {
+  const isEquityTrade = row.rowType === 'Trade' && row.instrumentType === 'Equity'
+  return isEquityTrade && (row._signedQty ?? 0) < 0 ? 1 : 0
+}
 
-    // Same-day tie-break, plain equity TRADES only: IBKR timestamps are date-only and
-    // the export lists rows newest-first, so a same-day buy+sell pair arrives sell-first.
-    // Read in that order it looks like opening a short — impossible in a cash account,
-    // which must own shares before selling them. Process acquisitions first.
-    //
-    // Two deliberate exemptions, both of which legitimately sell first:
-    //  • Options — sell-to-open is a normal opening action (premium selling), so a
-    //    same-day STO+BTC must keep its recorded order.
-    //  • Assignment/Exercise — when a spread breaches, the short leg is assigned first
-    //    (creating a stock position) and the long leg is exercised afterwards to close
-    //    it out. That order is real and must be preserved.
-    if (a.rowType !== 'Trade' || b.rowType !== 'Trade') return 0
-    if (a.instrumentType !== 'Equity' || b.instrumentType !== 'Equity') return 0
-    const aIsSell = (a._signedQty ?? 0) < 0 ? 1 : 0
-    const bIsSell = (b._signedQty ?? 0) < 0 ? 1 : 0
-    return aIsSell - bIsSell
-  })
+function inferOpenClose(positionRows) {
+  // Array.prototype.sort is stable, so equal (date, rank) keeps the recorded order.
+  const sorted = [...positionRows].sort((a, b) =>
+    (a.date - b.date) || (sameDayRank(a) - sameDayRank(b))
+  )
   const positions = {}
 
   for (const row of sorted) {
@@ -270,7 +273,10 @@ function addSyntheticExpirations(rows) {
   return [...rows, ...synthetic]
 }
 
-export function parseAllIBKR(file) {
+// Parse ONE export into raw mapped rows — no consolidation, no direction inference.
+// Those steps are deliberately deferred: they depend on the running share/contract
+// position, which only makes sense across an account's whole history.
+function parseIBKRRaw(file) {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
       header: false,
@@ -306,22 +312,7 @@ export function parseAllIBKR(file) {
             })
             .filter(Boolean)
 
-          // Merge same-day partial fills before inferring direction,
-          // so position tracking sees the consolidated quantities
-          const consolidated = consolidatePartialFills(rows)
-
-          // Infer open/close for trade rows using position tracking.
-          // Assignment/Exercise rows are included so shares they deliver are
-          // reflected in the running position (see inferOpenClose).
-          const positionRows = consolidated.filter(r =>
-            r.rowType === 'Trade' || r.rowType === 'Assignment' || r.rowType === 'Exercise'
-          )
-          inferOpenClose(positionRows)
-
-          // Strip internal field
-          consolidated.forEach(r => { delete r._signedQty })
-
-          resolve(addSyntheticExpirations(consolidated))
+          resolve(rows)
         } catch (e) {
           reject(e)
         }
@@ -329,4 +320,62 @@ export function parseAllIBKR(file) {
       error: reject,
     })
   })
+}
+
+// Identity of a transaction, for dropping rows that appear in two overlapping exports.
+// Deliberately excludes the row index baked into orderId, which differs per file.
+function rowIdentity(r) {
+  return [
+    r.date?.getTime(), r.rowType, r.subType, r.symbol,
+    r._signedQty ?? r.quantity, r.price, r.amount, r.description,
+  ].join('|')
+}
+
+/**
+ * Parse one or more IBKR Transaction History exports into a single row set.
+ *
+ * Splitting an account's history across files (e.g. per financial year) is fine, but
+ * the files MUST be combined before direction is inferred. inferOpenClose walks the
+ * running position, so parsing each file alone and concatenating would show a later
+ * file's sells against a zero position and label them SELL_TO_OPEN — inventing short
+ * positions and, downstream, phantom open holdings.
+ *
+ * Exact duplicate transactions across files are dropped, so re-downloading an
+ * overlapping date range doesn't double-count.
+ */
+export async function parseAllIBKR(fileOrFiles) {
+  const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]
+  if (!files.length) return []
+
+  const perFile = await Promise.all(files.map(parseIBKRRaw))
+
+  // Merge, dropping exact duplicates from overlapping exports
+  const seen = new Set()
+  const rows = []
+  for (const fileRows of perFile) {
+    for (const r of fileRows) {
+      const id = rowIdentity(r)
+      if (seen.has(id)) continue
+      seen.add(id)
+      rows.push(r)
+    }
+  }
+  rows.sort((a, b) => a.date - b.date)
+
+  // Merge same-day partial fills before inferring direction,
+  // so position tracking sees the consolidated quantities
+  const consolidated = consolidatePartialFills(rows)
+
+  // Infer open/close for trade rows using position tracking.
+  // Assignment/Exercise rows are included so shares they deliver are
+  // reflected in the running position (see inferOpenClose).
+  const positionRows = consolidated.filter(r =>
+    r.rowType === 'Trade' || r.rowType === 'Assignment' || r.rowType === 'Exercise'
+  )
+  inferOpenClose(positionRows)
+
+  // Strip internal field
+  consolidated.forEach(r => { delete r._signedQty })
+
+  return addSyntheticExpirations(consolidated)
 }

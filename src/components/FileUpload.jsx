@@ -8,8 +8,8 @@ const BROKER_CONFIG = {
   },
   ibkr: {
     title: 'Add IBKR Transactions',
-    hint:  'Export from IBKR → Reports → Activity → Transaction History (1Y) → Download',
-    multi: false,
+    hint:  'IBKR → Reports → Activity → Transaction History → Download  ·  Drop multiple periods together',
+    multi: true,   // history may be split across exports (e.g. per financial year)
   },
   selfwealth: {
     title: 'Add Selfwealth Transactions',

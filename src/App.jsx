@@ -139,7 +139,10 @@ export default function App() {
         allRows = await parseComsec(files[0])
       } else {
         const file = files[0]
-        if (broker === 'ibkr') allRows = await parseAllIBKR(file)
+        // IBKR history may be split across several exports (e.g. per financial year).
+        // They must be handed over together: direction is inferred from the running
+        // position, so a per-file parse would misread a later file's sells as shorts.
+        if (broker === 'ibkr') allRows = await parseAllIBKR(files)
         else if (broker === 'tradestation') allRows = await parseAllTradestation(file)
         else if (broker === 'tradezero') allRows = await parseAllTradezero(file)
         else allRows = await parseAllCSV(file)
