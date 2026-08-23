@@ -135,6 +135,63 @@ function mapRow(r) {
   }
 }
 
+// "YYYY-MM-DD" in LOCAL time — option expirations are parsed as local calendar dates,
+// so comparing via toISOString() would shift a day in any non-UTC timezone.
+function localISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// TradeStation does not label assignments — a share delivery from an exercised short
+// option is written as an ordinary Buy/Sell. Recover them, because an assignment is a
+// different event from a market trade: it drives the wheel / covered-call lifecycle.
+//
+// A row is only treated as an assignment when ALL of these hold:
+//   • no commission and no Order ID   — brokers do not charge for a delivery
+//   • price is exactly a strike we were SHORT, expiring that very day
+//   • direction agrees — a short CALL delivers shares (sell), a short PUT takes them (buy)
+//   • quantity is exactly contracts x 100
+//   • no opposing share trade in the same name that day
+//
+// The last two matter most. Loosening them mislabels ordinary same-day round trips
+// that happen to touch a strike price: this account has eight such pairs (KRE, EWZ,
+// BABA, V, AMZN, SPY, HD, COST) which are NOT assignments.
+function markAssignments(rows) {
+  const shortLegs = new Map()   // underlying|expiry|strike|callPut -> contracts
+  for (const r of rows) {
+    if (!r.callPut || r.isExpiration || r.action !== 'SELL_TO_OPEN') continue
+    const k = `${r.underlying}|${r.expiration}|${r.strike}|${r.callPut}`
+    shortLegs.set(k, (shortLegs.get(k) ?? 0) + r.quantity)
+  }
+
+  const shareRows = rows.filter(r => r.instrumentType === 'Equity')
+
+  for (const r of shareRows) {
+    if (Math.abs(r.commissions ?? 0) > 0.005 || r.orderId) continue
+
+    const delivered = r.action.startsWith('SELL')       // shares leaving = short call
+    const callPut   = delivered ? 'CALL' : 'PUT'
+    const contracts = shortLegs.get(`${r.underlying}|${localISODate(r.date)}|${r.price}|${callPut}`)
+    if (!contracts) continue
+    if (Math.abs(r.quantity - contracts * 100) > 0.001) continue
+
+    const hasOpposingSameDay = shareRows.some(x =>
+      x !== r &&
+      x.underlying === r.underlying &&
+      localISODate(x.date) === localISODate(r.date) &&
+      x.action.startsWith('SELL') !== delivered
+    )
+    if (hasOpposingSameDay) continue
+
+    r.rowType     = 'Assignment'
+    r.subType     = 'Assignment'
+    r.description = delivered
+      ? `Assigned — ${r.quantity} ${r.underlying} called away @ $${r.price}`
+      : `Assigned — ${r.quantity} ${r.underlying} put to us @ $${r.price}`
+  }
+
+  return rows
+}
+
 // For options past expiry with no close in the CSV, synthesise a worthless
 // expiration row so buildTrades can produce a closed P&L entry.
 function addSyntheticExpirations(rows) {
@@ -204,10 +261,15 @@ function _parsePapaResult({ data }, resolve, reject) {
       })
       .filter(Boolean)
 
+    // Recover assignments before synthesising expirations, so a short leg that was
+    // assigned is not also reported as having expired worthless.
+    markAssignments(rows)
+
     const withExp = addSyntheticExpirations(rows)
     console.log('[TS] parsed', data.length - headerIdx - 1, 'raw rows →',
                 rows.filter(r => r.callPut != null).length, 'option rows,',
-                rows.filter(r => r.instrumentType === 'Equity').length, 'share rows')
+                rows.filter(r => r.instrumentType === 'Equity').length, 'share rows,',
+                rows.filter(r => r.rowType === 'Assignment').length, 'assignments')
     console.log('[TS] opens:', rows.filter(r => r.openClose === 'Open').length,
                 'closes:', rows.filter(r => r.openClose === 'Close').length)
     console.log('[TS] expirations:', withExp.filter(r => r.isExpiration).length)

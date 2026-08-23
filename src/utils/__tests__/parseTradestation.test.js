@@ -214,3 +214,119 @@ describe.skipIf(!REAL_TS_PATH)('parseTradestation (real Activity Report file)', 
   })
 
 })
+
+
+// ── Share trades and assignment recovery ─────────────────────────────────────
+
+const TS_HEAD = [
+  '# -----------------------------------------------',
+  'TradeStation Historical Activity Report',
+  'Report Type: Trades',
+  '# -----------------------------------------------',
+  '',
+  '"Date","Symbol","CUSIP","Side","Quantity","Price","Principal","Commission","Other Fees","Net Amount","Order ID"',
+].join('\n')
+
+const ts = (...rows) => [TS_HEAD, ...rows].join('\n')
+
+// Share row. Assignments carry no commission and no Order ID.
+const share = (date, side, qty, sym, price, net, { comm = '$0.00', order = '' } = {}) =>
+  `"${date}","${sym.padEnd(6)}","123456789","${side}","${qty}","${price}","$0.00","${comm}","$0.00","${net}","${order.padEnd(20)}"`
+
+const shortCall = (date, occ, qty, price, net) =>
+  `"${date}","${occ}","696!!VK~8","","${qty}","${price}","$0.00","-$1.00","$0.00","${net}","1234LEG1            "`
+
+describe('parseTradestation — share trades', () => {
+
+  it('reads share rows, which were previously discarded entirely', async () => {
+    const rows = await parseCSVText(ts(
+      share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1298811437' }),
+    ))
+    const shares = rows.filter(r => r.instrumentType === 'Equity')
+    expect(shares).toHaveLength(1)
+    expect(shares[0].underlying).toBe('CSCO')
+    expect(shares[0].quantity).toBe(100)
+    expect(shares[0].amount).toBeCloseTo(-11161.25, 2)
+  })
+
+  // Direction is stated by TradeStation, never inferred from a running position.
+  it('maps Buy/Sell/Short/Cover to the right open-close direction', async () => {
+    const rows = await parseCSVText(ts(
+      share('08/01/2026', 'Buy',   '100.00',  'AAA', '$10.00', '-$1,000.00', { comm: '-$1.00', order: '1' }),
+      share('08/02/2026', 'Sell',  '-100.00', 'AAA', '$11.00',  '$1,100.00', { comm: '-$1.00', order: '2' }),
+      share('08/03/2026', 'Short', '-100.00', 'BBB', '$20.00',  '$2,000.00', { comm: '-$1.00', order: '3' }),
+      share('08/04/2026', 'Cover', '100.00',  'BBB', '$19.00', '-$1,900.00', { comm: '-$1.00', order: '4' }),
+    ))
+    const by = a => rows.find(r => r.action === a)
+    expect(by('BUY_TO_OPEN').openClose).toBe('Open')
+    expect(by('SELL_TO_CLOSE').openClose).toBe('Close')
+    expect(by('SELL_TO_OPEN').openClose).toBe('Open')
+    expect(by('BUY_TO_CLOSE').openClose).toBe('Close')
+  })
+
+})
+
+describe('parseTradestation — assignment recovery', () => {
+
+  // A short call assigned at expiry: shares leave at exactly the strike, with no
+  // commission and no Order ID. TradeStation writes it as a plain Sell.
+  it('recognises a short call assigned at expiry', async () => {
+    const rows = await parseCSVText(ts(
+      shortCall('07/27/2026', 'FIG 260731C24', '-1.00', '$0.48', '$45.21'),
+      share('07/31/2026', 'Sell', '-100.00', 'FIG', '$24.00', '$2,399.93'),
+    ))
+    const a = rows.filter(r => r.rowType === 'Assignment')
+    expect(a).toHaveLength(1)
+    expect(a[0].underlying).toBe('FIG')
+    expect(a[0].quantity).toBe(100)
+    expect(a[0].description).toMatch(/called away/)
+  })
+
+  it('recognises a short put assigned at expiry', async () => {
+    const rows = await parseCSVText(ts(
+      `"08/10/2026","CSCO 260814P113","172!!W#$2","","-2.00","$1.26","$252.00","-$3.00","-$0.06","$248.94","1295298252LEG2      "`,
+      share('08/14/2026', 'Buy', '200.00', 'CSCO', '$113.00', '-$22,600.00'),
+    ))
+    const a = rows.filter(r => r.rowType === 'Assignment')
+    expect(a).toHaveLength(1)
+    expect(a[0].description).toMatch(/put to us/)
+  })
+
+  // Direction must agree: a short CALL delivers shares. A BUY at a call strike is not
+  // an assignment of that call.
+  it('does not treat a buy at a short call strike as an assignment', async () => {
+    const rows = await parseCSVText(ts(
+      shortCall('07/27/2026', 'FIG 260731C24', '-1.00', '$0.48', '$45.21'),
+      share('07/31/2026', 'Buy', '100.00', 'FIG', '$24.00', '-$2,400.00'),
+    ))
+    expect(rows.filter(r => r.rowType === 'Assignment')).toHaveLength(0)
+  })
+
+  // Ordinary same-day round trips can touch a strike by coincidence. This account has
+  // eight such pairs; none are assignments.
+  it('does not treat a same-day round trip at a strike as an assignment', async () => {
+    const rows = await parseCSVText(ts(
+      shortCall('08/10/2026', 'COST 260814C942.5', '-3.00', '$1.00', '$300.00'),
+      share('08/14/2026', 'Short', '-300.00', 'COST', '$942.50', '$282,744.11'),
+      share('08/14/2026', 'Cover', '300.00',  'COST', '$945.00', '-$283,500.00'),
+    ))
+    expect(rows.filter(r => r.rowType === 'Assignment')).toHaveLength(0)
+  })
+
+  it('requires the share count to equal contracts x 100', async () => {
+    const rows = await parseCSVText(ts(
+      shortCall('07/27/2026', 'FIG 260731C24', '-1.00', '$0.48', '$45.21'),
+      share('07/31/2026', 'Sell', '-300.00', 'FIG', '$24.00', '$7,200.00'),
+    ))
+    expect(rows.filter(r => r.rowType === 'Assignment')).toHaveLength(0)
+  })
+
+  it('leaves a commissioned share trade at a strike price alone', async () => {
+    const rows = await parseCSVText(ts(
+      shortCall('07/27/2026', 'FIG 260731C24', '-1.00', '$0.48', '$45.21'),
+      share('07/31/2026', 'Sell', '-100.00', 'FIG', '$24.00', '$2,399.93', { comm: '-$5.00', order: '999' }),
+    ))
+    expect(rows.filter(r => r.rowType === 'Assignment')).toHaveLength(0)
+  })
+
+})
