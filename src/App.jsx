@@ -13,6 +13,7 @@ import AccountSidebar from './components/AccountSidebar'
 import GainLossSummary from './components/GainLossSummary'
 import ShareTracker from './components/ShareTracker'
 import StockOpenPositions from './components/StockOpenPositions'
+import CarriedLots from './components/CarriedLots'
 import StockClosedTable from './components/StockClosedTable'
 import TaxCentre from './components/TaxCentre'
 import CombinedDashboards from './components/CombinedDashboards'
@@ -31,6 +32,7 @@ import { tagRowsWithStrategy } from './utils/identifyStrategy'
 import { detectWheels } from './utils/detectWheel'
 import { buildTrades, computeStats, auFY, inFY } from './utils/calculatePnL'
 import { buildEquityTrades, computeEquityStats } from './utils/buildEquityTrades'
+import { loadCarriedLots, saveCarriedLots, carriedLotsToRows } from './utils/carriedLots'
 import { parseRBA } from './utils/parseRBA'
 import { parseRBI } from './utils/parseRBI'
 import { buildTaxData } from './utils/buildTaxData'
@@ -78,6 +80,7 @@ function emptyPortfolio(idx) {
     overrides:      loadOverrides(idx),
     moneyMovements: [],
     capitalTags:    loadCapitalTags(idx),
+    carriedLots:    loadCarriedLots(idx),
     swDetection:    [],     // Selfwealth: how each file's market was resolved
     equityData:     null,   // used by Tasty / IBKR
     equityDataAUS:  null,   // Selfwealth AUD market
@@ -146,6 +149,17 @@ export default function App() {
         else if (broker === 'tradestation') allRows = await parseAllTradestation(file)
         else if (broker === 'tradezero') allRows = await parseAllTradezero(file)
         else allRows = await parseAllCSV(file)
+      }
+
+      // Positions transferred in from another broker carry no trade record, so their
+      // cost basis is entered by hand and injected as synthetic opening purchases.
+      // Added before anything derived is built, so FIFO matching sees them as ordinary
+      // buys and the sales that follow can be matched against them.
+      const carriedLots = loadCarriedLots(idx)
+      if (carriedLots.length) {
+        const baseCcy = allRows.find(r => r.currency)?.currency ?? null
+        allRows = [...allRows, ...carriedLotsToRows(carriedLots, baseCcy)]
+          .sort((a, b) => a.date - b.date)
       }
 
       // Equity / share portfolio — always built for every broker
@@ -1117,6 +1131,16 @@ export default function App() {
                       <CumulativePnLChart dailyPnL={equityDailyPnL} />
                     </Collapsible>
                   )}
+
+                  {/* Cost basis for shares transferred in from another broker */}
+                  <CarriedLots
+                    lots={p.carriedLots ?? []}
+                    currency={activeCurrency ?? activeEquityDataDisplay.baseCurrency ?? null}
+                    onSave={lots => {
+                      saveCarriedLots(active, lots)
+                      updatePortfolio(active, { carriedLots: lots })
+                    }}
+                  />
 
                   {/* Open positions — always shown unfiltered (current holdings) */}
                   <Collapsible title="Open Positions">
