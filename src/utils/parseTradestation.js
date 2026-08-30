@@ -253,56 +253,110 @@ function addSyntheticExpirations(rows) {
 
 // The report has a metadata header block before the actual CSV columns.
 // Parse header:false, find the "Date" row, then manually map columns.
-function _parsePapaResult({ data }, resolve, reject) {
-  try {
-    const headerIdx = data.findIndex(r => r[0] === 'Date' && r[1] === 'Symbol')
-    if (headerIdx === -1) {
-      reject(new Error('Could not find column headers. Make sure this is a Tradestation Historical Activity Report CSV.'))
-      return
+// Map one parsed CSV into raw rows. Assignment recovery and synthetic expirations are
+// deliberately NOT done here — both span the whole account history (a short leg opened
+// in one export can be assigned in the next, and expirations depend on the net position
+// across every file), so they run once after all files are merged.
+function rawRowsFrom(data) {
+  const headerIdx = data.findIndex(r => r[0] === 'Date' && r[1] === 'Symbol')
+  if (headerIdx === -1) {
+    throw new Error('Could not find column headers. Make sure this is a Tradestation Historical Activity Report CSV.')
+  }
+
+  const headers = data[headerIdx].map(h => h.trim())
+  return data
+    .slice(headerIdx + 1)
+    .map(cells => {
+      const obj = {}
+      headers.forEach((h, i) => { obj[h] = (cells[i] || '').trim() })
+      return mapRow(obj)
+    })
+    .filter(Boolean)
+}
+
+// Identity of a transaction, for collapsing rows that appear in two overlapping exports.
+function rowIdentity(r) {
+  return [
+    r.date?.getTime(), r.symbol, r.subType, r.action,
+    r.quantity, r.price, r.amount, r.orderId,
+  ].join('|')
+}
+
+// Merge exports, allowing each distinct transaction the HIGHEST number of times it
+// appears in any single file.
+//
+// Not a plain Set: identical fills legitimately repeat within one export — an order
+// filling in equal clips at one price — and collapsing those loses real trades.
+// Counting per file keeps genuine repeats while still discarding the copies an
+// overlapping date range brings.
+function mergeFiles(perFile) {
+  const allowed = new Map()
+  for (const fileRows of perFile) {
+    const counts = new Map()
+    for (const r of fileRows) {
+      const id = rowIdentity(r)
+      counts.set(id, (counts.get(id) ?? 0) + 1)
     }
+    for (const [id, n] of counts) {
+      if (n > (allowed.get(id) ?? 0)) allowed.set(id, n)
+    }
+  }
 
-    const headers = data[headerIdx].map(h => h.trim())
-    const rows = data
-      .slice(headerIdx + 1)
-      .map(cells => {
-        const obj = {}
-        headers.forEach((h, i) => { obj[h] = (cells[i] || '').trim() })
-        return mapRow(obj)
-      })
-      .filter(Boolean)
-
-    // Recover assignments before synthesising expirations, so a short leg that was
-    // assigned is not also reported as having expired worthless.
-    markAssignments(rows)
-
-    const withExp = addSyntheticExpirations(rows)
-    console.log('[TS] parsed', data.length - headerIdx - 1, 'raw rows →',
-                rows.filter(r => r.callPut != null).length, 'option rows,',
-                rows.filter(r => r.instrumentType === 'Equity').length, 'share rows,',
-                rows.filter(r => r.rowType === 'Assignment').length, 'assignments')
-    console.log('[TS] opens:', rows.filter(r => r.openClose === 'Open').length,
-                'closes:', rows.filter(r => r.openClose === 'Close').length)
-    console.log('[TS] expirations:', withExp.filter(r => r.isExpiration).length)
-    resolve(withExp)
-  } catch (e) { reject(e) }
+  const emitted = new Map()
+  const rows = []
+  for (const fileRows of perFile) {
+    for (const r of fileRows) {
+      const id = rowIdentity(r)
+      const n = emitted.get(id) ?? 0
+      if (n >= (allowed.get(id) ?? 0)) continue
+      emitted.set(id, n + 1)
+      rows.push(r)
+    }
+  }
+  return rows.sort((a, b) => a.date - b.date)
 }
 
-export function parseCSVText(csvText) {
+function finalise(rows) {
+  // Recover assignments before synthesising expirations, so a short leg that was
+  // assigned is not also reported as having expired worthless.
+  markAssignments(rows)
+
+  const withExp = addSyntheticExpirations(rows)
+  console.log('[TS] parsed', rows.length, 'rows →',
+              rows.filter(r => r.callPut != null).length, 'option,',
+              rows.filter(r => r.instrumentType === 'Equity').length, 'share,',
+              rows.filter(r => r.rowType === 'Assignment').length, 'assignments,',
+              withExp.filter(r => r.isExpiration).length, 'expirations')
+  return withExp
+}
+
+function papaParse(source) {
   return new Promise((resolve, reject) => {
-    Papa.parse(csvText, {
+    Papa.parse(source, {
       header: false, skipEmptyLines: true,
-      complete: r => _parsePapaResult(r, resolve, reject),
+      complete: ({ data }) => {
+        try { resolve(rawRowsFrom(data)) } catch (e) { reject(e) }
+      },
       error: reject,
     })
   })
 }
 
-export function parseAllTradestation(file) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: false, skipEmptyLines: true,
-      complete: r => _parsePapaResult(r, resolve, reject),
-      error: reject,
-    })
-  })
+export async function parseCSVText(csvTextOrTexts) {
+  const texts = Array.isArray(csvTextOrTexts) ? csvTextOrTexts : [csvTextOrTexts]
+  return finalise(mergeFiles(await Promise.all(texts.map(papaParse))))
+}
+
+/**
+ * Parse one or more Tradestation Historical Activity Reports into a single row set.
+ *
+ * History may be split across exports (e.g. per financial year). They must be handed
+ * over together: assignment recovery matches a share delivery against the short option
+ * leg it came from, and synthetic expirations depend on the net position — both of
+ * which span files.
+ */
+export async function parseAllTradestation(fileOrFiles) {
+  const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]
+  if (!files.length) return []
+  return finalise(mergeFiles(await Promise.all(files.map(papaParse))))
 }

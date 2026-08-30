@@ -370,3 +370,47 @@ describe('parseTradestation — multi-leg order grouping', () => {
   })
 
 })
+
+// ── Multi-file merging ────────────────────────────────────────────────────────
+
+describe('parseTradestation — history split across exports', () => {
+
+  // Assignment recovery matches a share delivery against the short option leg it came
+  // from, and that leg can sit in an earlier export. Parsing files separately misses
+  // it: on the real exports, merging finds 5 assignments where the later file alone
+  // finds 4.
+  it('matches an assignment against a short leg opened in an earlier file', async () => {
+    const fy1 = ts(shortCall('06/27/2026', 'FIG 260731C24', '-1.00', '$0.48', '$45.21'))
+    const fy2 = ts(share('07/31/2026', 'Sell', '-100.00', 'FIG', '$24.00', '$2,399.93'))
+
+    // separately, the delivery has no short leg to match
+    expect((await parseCSVText(fy2)).filter(r => r.rowType === 'Assignment')).toHaveLength(0)
+
+    // merged, it is recognised
+    const merged = await parseCSVText([fy1, fy2])
+    expect(merged.filter(r => r.rowType === 'Assignment')).toHaveLength(1)
+  })
+
+  it('collapses transactions duplicated across overlapping exports', async () => {
+    const a = ts(share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1298811437' }))
+    const once = await parseCSVText([a])
+    expect(await parseCSVText([a, a])).toHaveLength(once.length)
+  })
+
+  // Identical fills legitimately repeat within one export — an order filling in equal
+  // clips at one price. Collapsing those would lose real trades.
+  it('keeps identical fills that repeat inside one export', async () => {
+    const csv = ts(
+      share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1298811437' }),
+      share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1298811437' }),
+    )
+    const shares = (await parseCSVText(csv)).filter(r => r.instrumentType === 'Equity')
+    expect(shares).toHaveLength(2)
+  })
+
+  it('still accepts a single export passed unwrapped', async () => {
+    const a = ts(share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1' }))
+    expect(await parseCSVText(a)).toHaveLength((await parseCSVText([a])).length)
+  })
+
+})

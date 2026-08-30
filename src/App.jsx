@@ -148,7 +148,7 @@ export default function App() {
         // They must be handed over together: direction is inferred from the running
         // position, so a per-file parse would misread a later file's sells as shorts.
         if (broker === 'ibkr') allRows = await parseAllIBKR(files)
-        else if (broker === 'tradestation') allRows = await parseAllTradestation(file)
+        else if (broker === 'tradestation') allRows = await parseAllTradestation(files)
         else if (broker === 'tradezero') allRows = await parseAllTradezero(file)
         else allRows = await parseAllCSV(file)
       }
