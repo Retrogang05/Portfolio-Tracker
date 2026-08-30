@@ -340,7 +340,7 @@ function rowIdentity(r) {
  * file's sells against a zero position and label them SELL_TO_OPEN — inventing short
  * positions and, downstream, phantom open holdings.
  *
- * Exact duplicate transactions across files are dropped, so re-downloading an
+ * Transactions duplicated ACROSS overlapping files are dropped, so re-downloading an
  * overlapping date range doesn't double-count.
  */
 export async function parseAllIBKR(fileOrFiles) {
@@ -349,14 +349,36 @@ export async function parseAllIBKR(fileOrFiles) {
 
   const perFile = await Promise.all(files.map(parseIBKRRaw))
 
-  // Merge, dropping exact duplicates from overlapping exports
-  const seen = new Set()
+  // Merge overlapping exports by allowing, for each distinct transaction, the HIGHEST
+  // number of times it appears in any single file.
+  //
+  // Not a plain Set: identical transactions legitimately repeat within one export —
+  // two $100,000 transfers on the same day, or a large order filling in equal clips —
+  // and collapsing those silently loses real money. Counting per file keeps genuine
+  // repeats while still discarding the copies an overlapping date range brings.
+  const allowed = new Map()   // identity -> highest count seen in any one file
+  for (const fileRows of perFile) {
+    const counts = new Map()
+    for (const r of fileRows) {
+      const id = rowIdentity(r)
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    for (const [id, n] of counts) {
+      if (n > (allowed.get(id) ?? 0)) allowed.set(id, n)
+    }
+  }
+
+  // Emit in original file order — inferOpenClose sorts stably, so ties on the same
+  // date resolve by the order rows arrive in, and reordering here would change how
+  // same-day trades are opened and closed.
+  const emitted = new Map()
   const rows = []
   for (const fileRows of perFile) {
     for (const r of fileRows) {
       const id = rowIdentity(r)
-      if (seen.has(id)) continue
-      seen.add(id)
+      const n = emitted.get(id) ?? 0
+      if (n >= (allowed.get(id) ?? 0)) continue
+      emitted.set(id, n + 1)
       rows.push(r)
     }
   }

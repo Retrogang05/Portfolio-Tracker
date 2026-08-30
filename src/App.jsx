@@ -41,7 +41,7 @@ import { exportBackup, importBackup } from './utils/backup'
 import { fmt } from './utils/format'
 
 // Per-portfolio broker config — index matches portfolio slot
-const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec', 'tradestation', 'tradezero', 'ibkr']
+const PORTFOLIO_BROKER = ['tastytrade', 'ibkr', 'selfwealth', 'selfwealth', 'comsec', 'tradestation', 'tradezero', 'ibkr', 'ibkr']
 
 function overridesKey(idx)   { return `portfolio-tracker:strategy-overrides:${idx}` }
 function capitalTagsKey(idx) { return `portfolio-tracker:capital-tags:${idx}` }
@@ -67,7 +67,11 @@ function applyOverrides(trades, overrides) {
   })
 }
 
-const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ', 'Sharan IBKR']
+const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ', 'Sharan IBKR', 'SMInvest']
+
+// Slot count is derived, so adding an account means adding one entry to each array above.
+const PORTFOLIO_COUNT = PORTFOLIO_NAMES.length
+const emptyPortfolios = () => Array.from({ length: PORTFOLIO_COUNT }, (_, i) => emptyPortfolio(i))
 
 function emptyPortfolio(idx) {
   return {
@@ -91,9 +95,7 @@ function emptyPortfolio(idx) {
 }
 
 export default function App() {
-  const [portfolios, setPortfolios] = useState([
-    emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2), emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6), emptyPortfolio(7),
-  ])
+  const [portfolios, setPortfolios] = useState(emptyPortfolios)
   const [active, setActive] = useState(0)
   const [view, setView] = useState('options')     // 'options' | 'stocks'
   const [swMarket, setSwMarket] = useState('aus') // Selfwealth: 'aus' | 'us'
@@ -647,14 +649,12 @@ export default function App() {
               if (!confirm('Clear all saved portfolio data and RBA rates?\n\nStrategy overrides and capital tags will also be removed.\nExport a backup first if you want to keep them.')) return
               await clearAll()
               // Clear localStorage overrides + tags for all portfolios
-              for (let i = 0; i < 8; i++) {
+              for (let i = 0; i < PORTFOLIO_COUNT; i++) {
                 localStorage.removeItem(`portfolio-tracker:strategy-overrides:${i}`)
                 localStorage.removeItem(`portfolio-tracker:capital-tags:${i}`)
+                localStorage.removeItem(`portfolio-tracker:carried-lots:${i}`)
               }
-              setPortfolios([
-                emptyPortfolio(0), emptyPortfolio(1), emptyPortfolio(2),
-                emptyPortfolio(3), emptyPortfolio(4), emptyPortfolio(5), emptyPortfolio(6), emptyPortfolio(7),
-              ])
+              setPortfolios(emptyPortfolios())
               setRbaRates(null)
               setRbaFileName('')
               setShowTax(false)

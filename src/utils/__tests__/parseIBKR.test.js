@@ -124,6 +124,36 @@ describe('parseAllIBKR — history split across several exports', () => {
     expect(twice).toHaveLength(once.length)
   })
 
+  // Identical transactions legitimately repeat within one export — two equal transfers
+  // on the same day, or an order filling in equal clips. The real exports contain both
+  // (three identical LITE sells on 28 Apr; paired ORCL/SMR/SPXW fills). Collapsing them
+  // silently loses real money: it cost $100,000 of deposits in one account and ~$2,800
+  // of option P&L in another.
+  it('keeps genuine repeats inside a single export', async () => {
+    const csv = ibkr(
+      `Transaction History,Data,2026-08-12,U***1,Electronic Fund Transfer,Deposit,-,-,-,-,100000.0,-,100000.0`,
+      `Transaction History,Data,2026-08-12,U***1,Electronic Fund Transfer,Deposit,-,-,-,-,100000.0,-,100000.0`,
+    )
+    const rows = await parseAllIBKR(csv)
+    const deposits = rows.filter(r => r.rowType === 'MoneyMovement' && r.subType === 'Deposit')
+    expect(deposits).toHaveLength(2)
+    expect(deposits.reduce((s, r) => s + r.amount, 0)).toBe(200000)
+  })
+
+  // Overlap must still collapse: the repeat count kept is the highest seen in ANY ONE
+  // file, not the sum across files.
+  it('keeps repeats once, not twice, when the same export is supplied twice', async () => {
+    const csv = ibkr(
+      `Transaction History,Data,2026-08-12,U***1,Electronic Fund Transfer,Deposit,-,-,-,-,100000.0,-,100000.0`,
+      `Transaction History,Data,2026-08-12,U***1,Electronic Fund Transfer,Deposit,-,-,-,-,100000.0,-,100000.0`,
+    )
+    const rows = await parseAllIBKR([csv, csv])
+    const total = rows
+      .filter(r => r.rowType === 'MoneyMovement' && r.subType === 'Deposit')
+      .reduce((s, r) => s + r.amount, 0)
+    expect(total).toBe(200000)
+  })
+
   it('still accepts a single file passed unwrapped', async () => {
     const a = ibkr(equity('2026-03-02', 'Buy', '100.0', 'AAPL', '200.0', '-20000'))
     expect(await parseAllIBKR(a)).toHaveLength((await parseAllIBKR([a])).length)
