@@ -10,6 +10,8 @@
 //   • Short puts → possible assignment → stock owned → covered calls → possible call-away
 //   • Detected when: assignment events exist OR ≥ 2 short-option legs on same underlying
 
+import { buildEquityTrades } from './buildEquityTrades'
+
 const LEAPS_DTE = 60
 
 // "5/16/26" → Date
@@ -164,49 +166,35 @@ function tryDetectWheel(rows, underlying) {
   const assignRows = rows.filter(r => r.rowType === 'Assignment')
   const expiryRows = rows.filter(r => r.rowType === 'Expiration' && !isSpread(r))
 
-  // Equity cash flows from assignment/exercise events.
-  // Regular equity Trade rows are NOT included wholesale — they may contain unrelated
-  // stock purchases that would distort the wheel P&L.
-  const assignmentEquityRows = rows.filter(r =>
+  // The stock leg, matched lot by lot.
+  //
+  // Netting raw cash flows does NOT work here. A wheel's shares can arrive by put
+  // assignment OR be bought outright, and leave by call assignment OR a market sale,
+  // and the two sides need not be the same size. BE acquired 100 shares by assignment
+  // and 100 on the open market, then had all 200 called away: summing only the
+  // assignment rows credited 200 shares of proceeds against 100 shares of cost and
+  // reported $39,274 where the real figure is $457.
+  //
+  // So defer to the FIFO matcher used for the share portfolio: it pairs each disposal
+  // with the lots that actually supplied it, nets fees, and leaves unsold lots out of
+  // realised P&L — which is what the old "assignment rows only" filter was really
+  // reaching for.
+  const equityRows = rows.filter(r =>
     r.rowType === 'EquityDelivery' ||
-    ((r.rowType === 'Assignment' || r.rowType === 'Exercise') && r.instrumentType === 'Equity')
+    ((r.rowType === 'Trade' || r.rowType === 'Assignment' || r.rowType === 'Exercise') &&
+     r.instrumentType === 'Equity')
+  )
+  const equityBook   = buildEquityTrades(equityRows)
+  const sharesHeld   = equityBook.openPositions.reduce((s, p) => s + p.quantity, 0)
+  const assignmentEquityRows = equityRows.filter(r =>
+    r.rowType === 'Assignment' || r.rowType === 'Exercise' || r.rowType === 'EquityDelivery'
   )
 
-  // Shares acquired via put assignment, and the date of the earliest such acquisition.
-  const acquisitions = assignmentEquityRows.filter(r => (r.amount ?? 0) < 0)
-  const assignedQty = acquisitions.reduce((s, r) => s + (r.quantity ?? 0), 0)
-  const firstAcqDate = acquisitions.length
-    ? Math.min(...acquisitions.map(r => r.date))
-    : null
-
-  // A wheel can close its stock leg two ways:
-  //   • Called away  → Assignment/Exercise row (already in assignmentEquityRows)
-  //   • Sold on the open market → regular equity Trade SELL row
-  // Include the latter, but ONLY sells dated on/after the assignment that delivered the
-  // shares, and only up to the assigned quantity. This captures the wheel exit without
-  // pulling in unrelated stock trades (e.g. positions held long before the wheel started).
-  const postAssignmentSells = []
-  if (firstAcqDate != null && assignedQty > 0) {
-    let remaining = assignedQty
-    const candidates = allTradeRows
-      .filter(r =>
-        r.instrumentType === 'Equity' &&
-        r.action?.startsWith('SELL') &&
-        r.date >= firstAcqDate
-      )
-      .sort((a, b) => a.date - b.date)
-
-    for (const r of candidates) {
-      if (remaining <= 0) break
-      const useQty = Math.min(r.quantity, remaining)
-      // Pro-rate the amount if only part of this sale covers assigned shares
-      const ratio = r.quantity > 0 ? useQty / r.quantity : 0
-      postAssignmentSells.push({ ...r, quantity: useQty, amount: (r.amount ?? 0) * ratio })
-      remaining -= useQty
-    }
-  }
-
-  const equityRows = [...assignmentEquityRows, ...postAssignmentSells]
+  // Market sales of shares, shown in the lifecycle so an exit that wasn't a call-away
+  // is still visible.
+  const postAssignmentSells = equityRows.filter(r =>
+    r.rowType === 'Trade' && r.action?.startsWith('SELL')
+  )
 
   const shortCalls = tradeRows.filter(r => r.callPut === 'CALL' && r.action.startsWith('SELL') && r.openClose === 'Open')
   const shortPuts  = tradeRows.filter(r => r.callPut === 'PUT'  && r.action.startsWith('SELL') && r.openClose === 'Open')
@@ -302,14 +290,8 @@ function tryDetectWheel(rows, underlying) {
     r.callPut === 'CALL' || (r.instrumentType === 'Equity' && !r.action.startsWith('BUY'))
   ).map(makeAssignment)
 
-  // Equity P&L only when we have both sides of the round-trip:
-  // a negative row (stock acquired via put assignment) AND a positive row (stock disposed).
-  // Without both, we'd show either gross proceeds or gross cost — not actual P&L.
-  const hasAcquisition  = equityRows.some(r => (r.amount ?? 0) < 0)
-  const hasDisposition  = equityRows.some(r => (r.amount ?? 0) > 0)
-  const equityPnL = (hasAcquisition && hasDisposition)
-    ? equityRows.reduce((s, r) => s + (r.amount ?? 0), 0)
-    : 0
+  // Realised only — lots still held contribute nothing until they are sold.
+  const equityPnL = equityBook.totalRealizedPnL
 
   const totalPremium = [...filteredCallLegs, ...filteredPutLegs].reduce((s, l) => s + l.netPremium, 0)
   const hasOpenCall  = filteredCallLegs.some(l => l.status === 'Open')
@@ -335,9 +317,8 @@ function tryDetectWheel(rows, underlying) {
     underlying,
     // Active if there are open option legs, or if stock is still held — either bought
     // outright, or assigned and not yet disposed of (called away or sold on market).
-    status:       hasOpenCall || hasOpenPut ||
-                  (hasEquityPurchase && !hasAssignments) ||
-                  (hasAcquisition && !hasDisposition) ? 'Active' : 'Complete',
+    // Active while any option leg is open or any shares are still held.
+    status:       hasOpenCall || hasOpenPut || sharesHeld > 0 ? 'Active' : 'Complete',
     currentPhase,
     callLegs:     filteredCallLegs,
     putLegs:      filteredPutLegs,
