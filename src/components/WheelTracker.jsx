@@ -133,7 +133,8 @@ function ShareSaleRow({ sale }) {
 // ── PMCC Card ─────────────────────────────────────────────────────────────────
 
 function PMCCCard({ pos }) {
-  const { longLeg, shortLegs, premiumCollected, netCost, breakevenPerShare, pctRecovered } = pos
+  const { longLeg, shortLegs, premiumCollected, netCost, breakevenPerShare, pctRecovered,
+          longClosed, longLegPnL, realisedPnL } = pos
   const openLeg = shortLegs.find(l => l.status === 'Open')
 
   return (
@@ -159,8 +160,21 @@ function PMCCCard({ pos }) {
               <span className="text-slate-600 text-xs">{longLeg.dteAtOpen}d when bought</span>
             </div>
             <div className="text-right">
-              <p className="text-red-400 font-semibold text-sm truncate">{fmtC(longLeg.cost)}</p>
-              <p className="text-slate-500 text-xs">${longLeg.costPerShare.toFixed(2)}/share</p>
+              {longClosed ? (
+                <>
+                  <p className={`font-semibold text-sm truncate ${longLegPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {fmtC(longLegPnL)}
+                  </p>
+                  <p className="text-slate-500 text-xs">
+                    {fmtC(longLeg.cost)} → {fmtC(longLeg.proceeds)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-red-400 font-semibold text-sm truncate">{fmtC(longLeg.cost)}</p>
+                  <p className="text-slate-500 text-xs">${longLeg.costPerShare.toFixed(2)}/share</p>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -173,35 +187,59 @@ function PMCCCard({ pos }) {
           </div>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3 pt-1">
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
-            <p className="text-xs text-slate-500 mb-1">Collected</p>
-            <p className="text-emerald-400 font-bold text-sm truncate">{fmtC(premiumCollected)}</p>
+        {/* Stats row — a closed position reports what it made, not what it still needs
+            to recover. Breakeven and cost recovery only mean something while the LEAPS
+            is still held. */}
+        {longClosed ? (
+          <div className="grid grid-cols-3 gap-3 pt-1">
+            <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
+              <p className="text-xs text-slate-500 mb-1">Long leg</p>
+              <p className={`font-bold text-sm truncate ${longLegPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtC(longLegPnL)}
+              </p>
+            </div>
+            <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
+              <p className="text-xs text-slate-500 mb-1">Premium</p>
+              <p className="text-emerald-400 font-bold text-sm truncate">{fmtC(premiumCollected)}</p>
+            </div>
+            <div className="bg-slate-900/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden border border-slate-600/40">
+              <p className="text-xs text-slate-400 mb-1">Total P&amp;L</p>
+              <p className={`font-bold text-sm truncate ${realisedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmtC(realisedPnL)}
+              </p>
+            </div>
           </div>
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
-            <p className="text-xs text-slate-500 mb-1">Net Cost</p>
-            <p className={`font-bold text-sm truncate ${netCost < 0 ? 'text-slate-200' : 'text-emerald-400'}`}>{fmtC(netCost)}</p>
-          </div>
-          <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
-            <p className="text-xs text-slate-500 mb-1">Breakeven</p>
-            <p className="text-slate-200 font-bold text-sm truncate">${breakevenPerShare.toFixed(2)}</p>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-3 pt-1">
+              <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
+                <p className="text-xs text-slate-500 mb-1">Collected</p>
+                <p className="text-emerald-400 font-bold text-sm truncate">{fmtC(premiumCollected)}</p>
+              </div>
+              <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
+                <p className="text-xs text-slate-500 mb-1">Net Cost</p>
+                <p className={`font-bold text-sm truncate ${netCost < 0 ? 'text-slate-200' : 'text-emerald-400'}`}>{fmtC(netCost)}</p>
+              </div>
+              <div className="bg-slate-800/60 rounded-lg p-2.5 text-center min-w-0 overflow-hidden">
+                <p className="text-xs text-slate-500 mb-1">Breakeven</p>
+                <p className="text-slate-200 font-bold text-sm truncate">${breakevenPerShare.toFixed(2)}</p>
+              </div>
+            </div>
 
-        {/* Cost recovery progress bar */}
-        <div>
-          <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-            <span>Cost recovery</span>
-            <span>{pctRecovered.toFixed(1)}% of ${Math.abs(longLeg.cost).toFixed(0)} recovered</span>
-          </div>
-          <div className="bg-slate-700 rounded-full h-2.5 overflow-hidden">
-            <div
-              className="h-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all"
-              style={{ width: `${pctRecovered}%` }}
-            />
-          </div>
-        </div>
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                <span>Cost recovery</span>
+                <span>{pctRecovered.toFixed(1)}% of ${Math.abs(longLeg.cost).toFixed(0)} recovered</span>
+              </div>
+              <div className="bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="h-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all"
+                  style={{ width: `${pctRecovered}%` }}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         {openLeg && (
           <div className="text-xs text-slate-500 bg-violet-900/20 rounded-lg px-3 py-2 border border-violet-700/30">

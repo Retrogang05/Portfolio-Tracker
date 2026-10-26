@@ -67,6 +67,14 @@ function applyOverrides(trades, overrides) {
   })
 }
 
+// Theme ids double as the <html> class name ('dark' is the default and adds none).
+const THEMES = [
+  { id: 'dark',       label: 'Dark',  title: 'Dark' },
+  { id: 'light',      label: 'Light', title: 'Light' },
+  { id: 'glass-dark', label: 'Glass', title: 'Dark glass' },
+  { id: 'glass-grey', label: 'Grey',  title: 'Grey glass' },
+]
+
 const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ', 'Sharan IBKR', 'SMInvest']
 
 // Slot count is derived, so adding an account means adding one entry to each array above.
@@ -517,7 +525,9 @@ export default function App() {
 
   // ── Theme: sync .light class on <html> and persist choice ────────────────
   useEffect(() => {
-    document.documentElement.classList.toggle('light', theme === 'light')
+    const el = document.documentElement
+    el.classList.remove('light', 'glass-dark', 'glass-grey')
+    if (theme !== 'dark') el.classList.add(theme)
     localStorage.setItem('portfolio-tracker:theme', theme)
   }, [theme])
 
@@ -610,14 +620,24 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Dark / light mode toggle */}
-          <button
-            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-            className="text-lg px-2 py-1 rounded transition-colors hover:bg-slate-800"
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
+          {/* Theme switcher */}
+          <div className="flex items-center gap-0.5 rounded-full border border-slate-700 p-0.5">
+            {THEMES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                title={t.title}
+                aria-pressed={theme === t.id}
+                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+                  theme === t.id
+                    ? 'bg-slate-700 text-slate-100'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
           {/* ── Backup controls ── */}
           <button

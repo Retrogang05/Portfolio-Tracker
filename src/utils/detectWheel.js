@@ -109,9 +109,25 @@ function tryDetectPMCC(rows, underlying) {
   const breakevenPerShare = longLeg.strike + (netCost < 0 ? costPerShare : -costPerShare)
   const pctRecovered     = Math.min(premiumCollected / Math.abs(longLeg.amount) * 100, 100)
 
-  const longClosed = rows.some(r =>
-    r.symbol === longLeg.symbol && (r.action === 'SELL_TO_CLOSE' || r.rowType === 'Expiration')
+  // Selling the LEAPS closes the position, and that sale is usually the bulk of the
+  // P&L — GEV bought at $138.50 and sold at $191.00, a $7,906 gain dwarfing $829 of
+  // short-call premium. Detecting the close as a bare boolean and never reading its
+  // amount left a closed, profitable position displayed as open and $19k down.
+  const longCloseRows = rows.filter(r =>
+    r.symbol === longLeg.symbol &&
+    (r.action === 'SELL_TO_CLOSE' || r.rowType === 'Expiration') &&
+    r.date >= longLeg.date
   )
+  const longClosed  = longCloseRows.length > 0
+  const longProceeds = longCloseRows.reduce((s, r) => s + (r.amount ?? 0), 0)
+  const longLegPnL  = longClosed ? longLeg.amount + longProceeds : 0
+  const longCloseDate = longClosed
+    ? new Date(Math.max(...longCloseRows.map(r => +r.date)))
+    : null
+
+  // Realised only — meaningless while the LEAPS is still held, since its cost is not
+  // a loss until it is sold.
+  const realisedPnL = longClosed ? longLegPnL + premiumCollected : premiumCollected
 
   return {
     id:         `PMCC-${underlying}`,
@@ -128,6 +144,10 @@ function tryDetectPMCC(rows, underlying) {
       costPerShare:   Math.abs(longLeg.amount) / (longLeg.quantity * 100),
       quantity:       longLeg.quantity,
       dteAtOpen:      daysBetween(longLeg.date, longExpiry),
+      closed:         longClosed,
+      closeDate:      longCloseDate,
+      proceeds:       longProceeds,
+      pnl:            longLegPnL,
     },
     shortLegs,
     premiumCollected,
@@ -135,6 +155,9 @@ function tryDetectPMCC(rows, underlying) {
     costPerShare,
     breakevenPerShare,
     pctRecovered,
+    longClosed,
+    longLegPnL,
+    realisedPnL,
   }
 }
 

@@ -24,3 +24,108 @@ body {
   --color-slate-900: oklch(96.8% .007 247.896);
   --color-slate-950: oklch(98.5% .004 247.0);
 }
+
+/* ── Glass themes ─────────────────────────────────────────────────────────
+   Same trick as .light above: redefine the slate scale rather than touching
+   components, so every existing bg-slate-N / text-slate-N class follows. The
+   difference is that here the surface steps become translucent, and a fixed
+   gradient sits behind the whole page for them to pick up.
+
+   Blur is applied only to the outer cards (slate-800/900). Nested rows use the
+   lighter slate-700 steps as a plain tint — stacking backdrop-filter on every
+   nested surface is both expensive and muddy, since each layer re-blurs the one
+   beneath it.                                                                */
+
+.glass-dark,
+.glass-grey {
+  --blur: blur(22px) saturate(150%);
+}
+
+.glass-dark {
+  --color-slate-950: rgba(0, 0, 0, .28);
+  --color-slate-900: rgba(22, 24, 30, .42);
+  --color-slate-800: rgba(26, 28, 36, .46);
+  --color-slate-700: rgba(255, 255, 255, .10);
+  /* slate-600/500 double as borders and muted text, so they stay opaque greys —
+     at a border's alpha they would be unreadable as text. */
+  --color-slate-600: oklch(50% .03 257);
+  --color-slate-500: oklch(62% .035 257);
+  --color-slate-400: oklch(72% .038 257);
+  --color-slate-300: oklch(84% .028 257);
+  --color-slate-200: oklch(91% .02  257);
+  --color-slate-100: oklch(96% .012 257);
+  --color-slate-50:  oklch(98% .006 257);
+
+  --backdrop:
+    radial-gradient(50% 45% at 15% 10%,  rgba(41,98,255,.30) 0%, rgba(41,98,255,0) 60%),
+    radial-gradient(45% 45% at 90% 15%,  rgba(8,153,129,.28) 0%, rgba(8,153,129,0) 60%),
+    radial-gradient(60% 50% at 70% 100%, rgba(200,151,74,.22) 0%, rgba(200,151,74,0) 65%),
+    linear-gradient(160deg, #11131a 0%, #0b0c10 60%, #07080a 100%);
+  --glass-edge: rgba(255, 255, 255, .10);
+  --glass-line: rgba(255, 255, 255, .14);
+  --glass-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+}
+
+.glass-grey {
+  --color-slate-950: rgba(255, 255, 255, .32);
+  --color-slate-900: rgba(255, 255, 255, .30);
+  --color-slate-800: rgba(255, 255, 255, .38);
+  --color-slate-700: rgba(255, 255, 255, .62);
+  /* slate-600/500 double as borders and muted text, so they stay opaque greys —
+     at a border's alpha they would be unreadable as text. */
+  --color-slate-600: oklch(60% .022 257);
+  --color-slate-500: oklch(52% .028 257);
+  --color-slate-400: oklch(42% .03  257);
+  --color-slate-300: oklch(32% .032 257);
+  --color-slate-200: oklch(26% .034 257);
+  --color-slate-100: oklch(20% .036 257);
+  --color-slate-50:  oklch(16% .03  257);
+
+  --backdrop:
+    radial-gradient(50% 45% at 12% 8%,   rgba(235,238,242,.75) 0%, rgba(235,238,242,0) 62%),
+    radial-gradient(45% 45% at 90% 12%,  rgba(185,194,208,.80) 0%, rgba(185,194,208,0) 62%),
+    radial-gradient(60% 50% at 70% 100%, rgba(110,120,135,.55) 0%, rgba(110,120,135,0) 65%),
+    radial-gradient(40% 40% at 25% 75%,  rgba(150,160,175,.60) 0%, rgba(150,160,175,0) 70%),
+    linear-gradient(165deg, #cdd1d7 0%, #b3b9c1 55%, #959ca6 100%);
+  --glass-edge: rgba(255, 255, 255, .55);
+  --glass-line: rgba(255, 255, 255, .75);
+  --glass-shadow: 0 10px 36px rgba(20, 28, 40, .20);
+}
+
+/* Signal colours need to stay legible against a light, busy backdrop — the
+   default 400-step greens and reds wash out on grey glass. */
+.glass-grey {
+  --color-emerald-400: oklch(52% .13 162);
+  --color-emerald-300: oklch(56% .12 162);
+  --color-red-400:     oklch(54% .20 25);
+  --color-red-300:     oklch(58% .18 25);
+  --color-amber-300:   oklch(52% .12 75);
+  --color-violet-400:  oklch(50% .18 290);
+  --color-blue-300:    oklch(50% .15 250);
+  --color-orange-300:  oklch(54% .14 55);
+}
+
+:is(.glass-dark, .glass-grey) body {
+  background: var(--backdrop) fixed;
+  background-attachment: fixed;
+}
+
+/* Outer cards get the blur and a lit top edge. */
+:is(.glass-dark, .glass-grey) :is(
+  [class~="bg-slate-800"],
+  [class~="bg-slate-900"],
+  [class~="bg-slate-900/60"],
+  [class~="bg-slate-800/60"]
+) {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-line);
+}
+
+/* Where blur is unsupported, fall back to a near-solid card so text stays
+   readable rather than sitting on a transparent gradient. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-dark { --color-slate-900: rgba(18, 19, 24, .94); --color-slate-800: rgba(24, 26, 32, .94); }
+  .glass-grey { --color-slate-900: rgba(240, 242, 245, .94); --color-slate-800: rgba(246, 247, 249, .94); }
+}

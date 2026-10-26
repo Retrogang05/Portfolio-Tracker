@@ -19,8 +19,9 @@
     <!-- Apply saved theme before React mounts to avoid a flash of wrong theme -->
     <script>
       (function () {
-        if (localStorage.getItem('portfolio-tracker:theme') === 'light')
-          document.documentElement.classList.add('light');
+        var t = localStorage.getItem('portfolio-tracker:theme');
+        if (t === 'light' || t === 'glass-dark' || t === 'glass-grey')
+          document.documentElement.classList.add(t);
       })();
     </script>
   </head>
