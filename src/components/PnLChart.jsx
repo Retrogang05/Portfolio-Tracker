@@ -2,6 +2,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { fmt } from '../utils/format'
+import { useThemeColors } from '../utils/themeColors'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -20,6 +21,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function PnLChart({ data }) {
+  const c = useThemeColors()
   const isPositive = data[data.length - 1]?.cumPnL >= 0
   return (
     <div className="bg-slate-800 rounded-xl p-5">
@@ -28,19 +30,19 @@ export default function PnLChart({ data }) {
         <AreaChart data={data} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
           <defs>
             <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={isPositive ? '#34d399' : '#f87171'} stopOpacity={0.25} />
-              <stop offset="95%" stopColor={isPositive ? '#34d399' : '#f87171'} stopOpacity={0} />
+              <stop offset="5%" stopColor={isPositive ? c.sigGreen : c.sigRed} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={isPositive ? c.sigGreen : c.sigRed} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis dataKey="date" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} />
-          <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} tickFormatter={v => `$${v}`} width={70} />
+          <CartesianGrid strokeDasharray="3 3" stroke={c.chartGrid} />
+          <XAxis dataKey="date" tick={{ fill: c.chartAxis, fontSize: 11 }} tickLine={false} />
+          <YAxis tick={{ fill: c.chartAxis, fontSize: 11 }} tickLine={false} tickFormatter={v => `$${v}`} width={70} />
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#475569" />
+          <ReferenceLine y={0} stroke={c.chartZero} />
           <Area
             type="monotone"
             dataKey="cumPnL"
-            stroke={isPositive ? '#34d399' : '#f87171'}
+            stroke={isPositive ? c.sigGreen : c.sigRed}
             strokeWidth={2}
             fill="url(#pnlGrad)"
             dot={false}

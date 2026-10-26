@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { fmt } from '../utils/format'
 import { auFY } from '../utils/calculatePnL'
 import { capitalRowId, effectiveCategory } from './CapitalMovements'
+import { useThemeColors } from '../utils/themeColors'
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -51,6 +52,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function YearSummary({ byYear, movements = [], tags = {}, subtitle = 'Options closed trades · 1 Jul – 30 Jun' }) {
+  const c = useThemeColors()
   const years = byYear.map(y => y.year)
   const [selectedYear, setSelectedYear] = useState(() => years[years.length - 1])
 
@@ -141,13 +143,13 @@ export default function YearSummary({ byYear, movements = [], tags = {}, subtitl
       {chartData.length > 0 && (
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} tickLine={false} tickFormatter={v => `$${v}`} width={70} />
+            <CartesianGrid strokeDasharray="3 3" stroke={c.chartGrid} />
+            <XAxis dataKey="label" tick={{ fill: c.chartAxis, fontSize: 11 }} tickLine={false} />
+            <YAxis tick={{ fill: c.chartAxis, fontSize: 11 }} tickLine={false} tickFormatter={v => `$${v}`} width={70} />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, i) => (
-                <Cell key={i} fill={entry.pnl >= 0 ? '#34d399' : '#f87171'} />
+                <Cell key={i} fill={entry.pnl >= 0 ? c.sigGreen : c.sigRed} />
               ))}
             </Bar>
           </BarChart>

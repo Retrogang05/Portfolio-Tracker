@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { fmt } from '../utils/format'
 import { auFY } from '../utils/calculatePnL'
+import { useThemeColors } from '../utils/themeColors'
 
 const PERIODS = [
   { label: 'Month', key: 'month' },
@@ -34,6 +35,7 @@ function Row({ label, sublabel, value, color, isCount }) {
 }
 
 export default function GainLossSummary({ trades = [], equityData = null }) {
+  const c = useThemeColors()
   const [period, setPeriod] = useState('fy')
 
   const items = useMemo(() => {
@@ -68,7 +70,7 @@ export default function GainLossSummary({ trades = [], equityData = null }) {
         { value: Math.max(gains.length, 0.001) },
         { value: Math.max(losses.length, 0.001) },
       ]
-  const donutColors = noData ? ['#1e293b'] : ['#34d399', '#f87171']
+  const donutColors = noData ? ['var(--color-slate-800)'] : [c.sigGreen, c.sigRed]
 
   return (
     <div className="bg-slate-800 rounded-xl p-4 space-y-3">

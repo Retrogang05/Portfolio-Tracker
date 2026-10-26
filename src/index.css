@@ -92,17 +92,63 @@ body {
   --glass-shadow: 0 10px 36px rgba(20, 28, 40, .20);
 }
 
-/* Signal colours need to stay legible against a light, busy backdrop — the
-   default 400-step greens and reds wash out on grey glass. */
+/* ── Signal colours ───────────────────────────────────────────────────────
+   TradingView's own up/down tokens, as used by the trading desk: the 500 steps
+   are the candle colours, the 400/300 steps the lighter variants for text on
+   dark surfaces. Charts and the heatmap read these rather than hardcoding a
+   hex, so a light backdrop gets the darker, saturated pair instead of the
+   washed-out 400s.                                                            */
+:root {
+  --sig-green:     #22ab94;        /* minty-green-400 — on dark      */
+  --sig-green-rgb: 34 171 148;
+  --sig-red:       #f7525f;        /* ripe-red-400                   */
+  --sig-red-rgb:   242 54 69;
+  --sig-amber:     #c8974a;
+
+  --chart-grid: rgba(148, 163, 184, .12);
+  --chart-axis: #7b8794;
+  --chart-zero: rgba(148, 163, 184, .35);
+
+  --heat-green-lo: #42bda8;        /* minty-green-300 — faint cells  */
+  --heat-green-hi: #eafff8;        /* on a saturated cell            */
+  --heat-red-lo:   #f7525f;
+  --heat-red-hi:   #fff1f2;
+  --heat-zero-bg:  #1e293b;
+  --heat-zero-fg:  #64748b;
+  --heat-empty-fg: #475569;
+}
+
+/* Light surfaces: the 400-step pair washes out, so drop to the darker greens
+   and reds the desk uses for day mode, and invert the heatmap text. */
+.light,
 .glass-grey {
-  --color-emerald-400: oklch(52% .13 162);
-  --color-emerald-300: oklch(56% .12 162);
-  --color-red-400:     oklch(54% .20 25);
-  --color-red-300:     oklch(58% .18 25);
-  --color-amber-300:   oklch(52% .12 75);
-  --color-violet-400:  oklch(50% .18 290);
-  --color-blue-300:    oklch(50% .15 250);
-  --color-orange-300:  oklch(54% .14 55);
+  --sig-green:     #067a64;
+  --sig-green-rgb: 6 122 100;
+  --sig-red:       #cc2433;
+  --sig-red-rgb:   204 36 51;
+  --sig-amber:     #a8650f;
+
+  --chart-grid: rgba(20, 28, 40, .10);
+  --chart-axis: #525963;
+  --chart-zero: rgba(20, 28, 40, .25);
+
+  --heat-green-lo: #05614f;
+  --heat-green-hi: #ffffff;
+  --heat-red-lo:   #a81d29;
+  --heat-red-hi:   #ffffff;
+  --heat-zero-bg:  rgba(20, 28, 40, .06);
+  --heat-zero-fg:  #525963;
+  --heat-empty-fg: #8b9099;
+
+  /* Tailwind's own emerald/red utilities, used for figures throughout */
+  --color-emerald-400: #067a64;
+  --color-emerald-300: #067a64;
+  --color-red-400:     #cc2433;
+  --color-red-300:     #cc2433;
+  --color-amber-300:   #a8650f;
+  --color-violet-400:  #5b3fd6;
+  --color-blue-300:    #1e52d6;
+  --color-orange-300:  #a8560f;
 }
 
 :is(.glass-dark, .glass-grey) body {

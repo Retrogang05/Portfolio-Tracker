@@ -4,6 +4,7 @@ import {
   Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { fmt } from '../utils/format'
+import { useThemeColors } from '../utils/themeColors'
 
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -24,6 +25,7 @@ function CustomTooltip({ active, payload }) {
 }
 
 export default function CumulativePnLChart({ dailyPnL = {} }) {
+  const c = useThemeColors()
   const data = useMemo(() => {
     const sorted = Object.entries(dailyPnL).sort(([a], [b]) => a.localeCompare(b))
     let cumulative = 0
@@ -40,7 +42,7 @@ export default function CumulativePnLChart({ dailyPnL = {} }) {
   if (data.length < 2) return null
 
   const finalPnL    = data[data.length - 1].cumulative
-  const lineColor   = finalPnL >= 0 ? '#34d399' : '#f87171'
+  const lineColor   = finalPnL >= 0 ? c.sigGreen : c.sigRed
 
   const formatXAxis = d =>
     new Date(d + 'T00:00:00Z').toLocaleDateString('en-AU', { month: 'short', year: '2-digit' })
@@ -63,26 +65,26 @@ export default function CumulativePnLChart({ dailyPnL = {} }) {
             </linearGradient>
           </defs>
 
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.07)" />
+          <CartesianGrid strokeDasharray="3 3" stroke={c.chartGrid} />
 
           <XAxis
             dataKey="date"
             tickFormatter={formatXAxis}
-            tick={{ fill: '#64748b', fontSize: 11 }}
+            tick={{ fill: c.chartAxis, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
           />
           <YAxis
             tickFormatter={v => fmt(v)}
-            tick={{ fill: '#64748b', fontSize: 11 }}
+            tick={{ fill: c.chartAxis, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
             width={72}
           />
 
           <Tooltip content={<CustomTooltip />} />
-          <ReferenceLine y={0} stroke="#475569" strokeDasharray="4 2" />
+          <ReferenceLine y={0} stroke={c.chartZero} strokeDasharray="4 2" />
 
           <Area
             type="monotone"
@@ -91,7 +93,7 @@ export default function CumulativePnLChart({ dailyPnL = {} }) {
             strokeWidth={2}
             fill="url(#cumGradient)"
             dot={false}
-            activeDot={{ r: 4, fill: lineColor, stroke: '#1e293b', strokeWidth: 2 }}
+            activeDot={{ r: 4, fill: lineColor, stroke: 'var(--color-slate-800)', strokeWidth: 2 }}
           />
         </AreaChart>
       </ResponsiveContainer>

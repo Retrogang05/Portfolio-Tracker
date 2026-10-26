@@ -1,41 +1,39 @@
 import { useState, useMemo } from 'react'
 import { fmt } from '../utils/format'
+import { useThemeColors } from '../utils/themeColors'
 
 const DOW   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const JOURNAL_MOOD_COLOR = {
-  good:    '#34d399',
-  neutral: '#fbbf24',
-  bad:     '#f87171',
-}
+const journalMoodColor = c => ({
+  good:    c.sigGreen,
+  neutral: c.sigAmber,
+  bad:     c.sigRed,
+})
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
-function cellColors(pnl, maxAbs) {
+// Cell fill scales with magnitude; the text colour flips once the fill is strong
+// enough to carry light type. Both sides come from theme tokens — a fixed mint
+// green on a 20%-alpha fill is invisible against a light backdrop.
+function cellColors(pnl, maxAbs, c) {
   if (pnl === null || pnl === undefined) {
-    // No trades — empty cell
-    return { bg: 'transparent', text: '#475569', amount: null }
+    return { bg: 'transparent', text: c.heatEmptyFg, amount: null }
   }
   if (Math.abs(pnl) < 0.01) {
-    return { bg: '#1e293b', text: '#64748b', amount: '#64748b' }
+    return { bg: c.heatZeroBg, text: c.heatZeroFg, amount: c.heatZeroFg }
   }
   const ratio = Math.min(Math.abs(pnl) / maxAbs, 1)
   // alpha 0.20 (tiny) → 0.85 (max)
   const alpha = 0.20 + ratio * 0.65
+  const strong = ratio > 0.45
   if (pnl > 0) {
-    return {
-      bg:     `rgba(16,185,129,${alpha.toFixed(2)})`,   // emerald
-      text:   ratio > 0.45 ? '#ecfdf5' : '#6ee7b7',
-      amount: ratio > 0.45 ? '#ecfdf5' : '#6ee7b7',
-    }
+    const fg = strong ? c.heatGreenHi : c.heatGreenLo
+    return { bg: `rgb(${c.sigGreenRgb} / ${alpha.toFixed(2)})`, text: fg, amount: fg }
   }
-  return {
-    bg:     `rgba(239,68,68,${alpha.toFixed(2)})`,      // red
-    text:   ratio > 0.45 ? '#fef2f2' : '#fca5a5',
-    amount: ratio > 0.45 ? '#fef2f2' : '#fca5a5',
-  }
+  const fg = strong ? c.heatRedHi : c.heatRedLo
+  return { bg: `rgb(${c.sigRedRgb} / ${alpha.toFixed(2)})`, text: fg, amount: fg }
 }
 
 function fmtCompact(n) {
@@ -87,7 +85,7 @@ function computeDowStats(dailyPnL) {
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function DayCell({ cell, data, colors, isHovered, onEnter, onLeave, journalMood }) {
+function DayCell({ cell, data, colors, theme, isHovered, onEnter, onLeave, journalMood }) {
   return (
     <div
       className="rounded-lg flex flex-col justify-between p-2 cursor-default select-none transition-all relative"
@@ -109,7 +107,7 @@ function DayCell({ cell, data, colors, isHovered, onEnter, onLeave, journalMood 
       {journalMood && (
         <span
           className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-          style={{ backgroundColor: JOURNAL_MOOD_COLOR[journalMood] ?? '#94a3b8' }}
+          style={{ backgroundColor: journalMoodColor(theme)[journalMood] ?? theme.chartAxis }}
           title="Journal entry"
         />
       )}
@@ -143,13 +141,14 @@ function HoverDetail({ dateKey, data }) {
 }
 
 function DowSummary({ dowStats, maxAvgAbs }) {
+  const themeColors = useThemeColors()
   return (
     <div className="mt-4 pt-4 border-t border-slate-700">
       <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Avg P&L by Day of Week · all time</p>
       <div className="grid grid-cols-7 gap-1">
         {DOW.map((day, i) => {
           const s = dowStats[i]
-          const colors = cellColors(s.avgPnL, maxAvgAbs)
+          const colors = cellColors(s.avgPnL, maxAvgAbs, themeColors)
           return (
             <div
               key={day}
@@ -177,12 +176,13 @@ function DowSummary({ dowStats, maxAvgAbs }) {
 // ── Legend ────────────────────────────────────────────────────────────────────
 
 function Legend() {
+  const colors = useThemeColors()
   const steps = [
-    { label: 'Large loss',   bg: 'rgba(239,68,68,0.85)' },
-    { label: 'Small loss',   bg: 'rgba(239,68,68,0.30)' },
+    { label: 'Large loss',   bg: `rgb(${colors.sigRedRgb} / 0.85)` },
+    { label: 'Small loss',   bg: `rgb(${colors.sigRedRgb} / 0.30)` },
     { label: 'No trades',    bg: 'transparent', border: '1px solid #334155' },
-    { label: 'Small gain',   bg: 'rgba(16,185,129,0.30)' },
-    { label: 'Large gain',   bg: 'rgba(16,185,129,0.85)' },
+    { label: 'Small gain',   bg: `rgb(${colors.sigGreenRgb} / 0.30)` },
+    { label: 'Large gain',   bg: `rgb(${colors.sigGreenRgb} / 0.85)` },
   ]
   return (
     <div className="flex items-center gap-1.5">
@@ -203,6 +203,7 @@ function Legend() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CalendarHeatmap({ dailyPnL, journalDates = {} }) {
+  const themeColors = useThemeColors()
   const allDates = useMemo(() => Object.keys(dailyPnL).sort(), [dailyPnL])
   if (!allDates.length) return null
 
@@ -297,13 +298,14 @@ export default function CalendarHeatmap({ dailyPnL, journalDates = {} }) {
                 return <div key={di} style={{ height: 72 }} />
               }
               const data   = dailyPnL[cell.key] ?? null
-              const colors = cellColors(data?.pnl ?? null, maxAbs)
+              const colors = cellColors(data?.pnl ?? null, maxAbs, themeColors)
               return (
                 <DayCell
                   key={di}
                   cell={cell}
                   data={data}
                   colors={colors}
+                  theme={themeColors}
                   isHovered={hovered === cell.key}
                   onEnter={() => setHovered(cell.key)}
                   onLeave={() => setHovered(null)}
