@@ -67,13 +67,21 @@ function applyOverrides(trades, overrides) {
   })
 }
 
-// Theme ids double as the <html> class name ('dark' is the default and adds none).
-const THEMES = [
-  { id: 'dark',       label: 'Dark',  title: 'Dark' },
-  { id: 'light',      label: 'Light', title: 'Light' },
-  { id: 'glass-dark', label: 'Glass', title: 'Dark glass' },
-  { id: 'glass-grey', label: 'Grey',  title: 'Grey glass' },
+// Auto follows the device's light/dark setting; Day and Night override it.
+// Labels stay short so the top bar does not wrap.
+const LOOKS = [
+  { id: 'auto',  label: 'Auto',  title: 'Follow the device setting' },
+  { id: 'day',   label: 'Day',   title: 'Grey glass' },
+  { id: 'night', label: 'Night', title: 'Dark glass' },
 ]
+
+// A look resolves to one of the two glass classes.
+export function resolveLook(look) {
+  const day = look === 'day' ||
+    (look === 'auto' && typeof matchMedia === 'function' &&
+     matchMedia('(prefers-color-scheme: light)').matches)
+  return day ? 'glass-grey' : 'glass-dark'
+}
 
 const PORTFOLIO_NAMES = ['Divya Tasty', 'SAHR IBKR', 'Divya SW', 'SAHR SW', 'Divya COMSEC', 'Divya TS', 'Divya TZ', 'Sharan IBKR', 'SMInvest']
 
@@ -121,7 +129,7 @@ export default function App() {
   const [rbiError, setRbiError] = useState(null)
   const [dbReady, setDbReady] = useState(false)   // true once IndexedDB initial load is done
   const [theme, setTheme] = useState(
-    () => localStorage.getItem('portfolio-tracker:theme') ?? 'dark'
+    () => localStorage.getItem('portfolio-tracker:theme') ?? 'auto'
   )
   const [importStatus, setImportStatus] = useState(null) // { ok, message } | null
   const importFileRef = useRef(null)
@@ -526,9 +534,18 @@ export default function App() {
   // ── Theme: sync .light class on <html> and persist choice ────────────────
   useEffect(() => {
     const el = document.documentElement
-    el.classList.remove('light', 'glass-dark', 'glass-grey')
-    if (theme !== 'dark') el.classList.add(theme)
+    const apply = () => {
+      el.classList.remove('light', 'glass-dark', 'glass-grey')
+      el.classList.add(resolveLook(theme))
+    }
+    apply()
     localStorage.setItem('portfolio-tracker:theme', theme)
+
+    // Auto has to keep following the device if the setting changes mid-session.
+    if (theme !== 'auto' || typeof matchMedia !== 'function') return
+    const mq = matchMedia('(prefers-color-scheme: light)')
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
   }, [theme])
 
   // ── Equity-only portfolios always use the stocks view ────────────────────
@@ -549,7 +566,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="min-h-screen page-root bg-slate-900 text-slate-100">
       {/* ── Import status banner ──────────────────────────────────────────── */}
       {importStatus && (
         <div className={`px-6 py-2.5 flex items-center justify-between text-sm ${
@@ -564,15 +581,15 @@ export default function App() {
         </div>
       )}
 
-      <header className="border-b border-slate-700/60 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
+      <header className="app-bar border-b border-slate-700/60 px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4 min-w-0 flex-wrap">
+          <div className="flex items-center gap-3 shrink-0">
             <span className="text-2xl">📈</span>
             <span className="font-bold text-lg tracking-tight">Portfolio Tracker</span>
           </div>
 
           {/* Portfolio switcher */}
-          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+          <div className="account-rail flex items-center gap-1 bg-slate-800 rounded-lg p-1">
             {portfolios.map((pf, i) => {
               const pfBroker = PORTFOLIO_BROKER[i] ?? 'tastytrade'
               return (
@@ -588,11 +605,10 @@ export default function App() {
                       setView('stocks')
                     }
                   }}
-                  className={`px-3 py-1 rounded text-sm transition-colors ${
-                    active === i
-                      ? 'bg-slate-600 text-slate-100 font-medium'
-                      : 'text-slate-400 hover:text-slate-200'
+                  className={`account-tab px-3 py-1 rounded text-sm transition-colors ${
+                    active === i ? 'font-medium' : 'text-slate-400 hover:text-slate-200'
                   }`}
+                  aria-pressed={active === i}
                 >
                   {pf.name}
                   {pfBroker === 'selfwealth' && (
@@ -619,20 +635,19 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Theme switcher */}
-          <div className="flex items-center gap-0.5 rounded-full border border-slate-700 p-0.5">
-            {THEMES.map(t => (
+        <div className="flex items-center gap-3 flex-wrap min-w-0">
+          {/* Look switcher */}
+          <div className="flex items-center gap-0.5 rounded-full border border-slate-700 p-0.5 shrink-0">
+            {LOOKS.map(t => (
               <button
                 key={t.id}
                 onClick={() => setTheme(t.id)}
                 title={t.title}
                 aria-pressed={theme === t.id}
-                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
-                  theme === t.id
-                    ? 'bg-slate-700 text-slate-100'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}
+                className="text-xs px-2.5 py-1 rounded-full transition-colors"
+                style={theme === t.id
+                  ? { background: 'var(--pill-on-bg)', color: 'var(--pill-on-fg)', boxShadow: 'var(--elev-sm)' }
+                  : { color: 'var(--color-slate-500)' }}
               >
                 {t.label}
               </button>

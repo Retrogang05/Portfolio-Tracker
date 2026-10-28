@@ -26,96 +26,177 @@ body {
 }
 
 /* ── Glass themes ─────────────────────────────────────────────────────────
-   Same trick as .light above: redefine the slate scale rather than touching
-   components, so every existing bg-slate-N / text-slate-N class follows. The
-   difference is that here the surface steps become translucent, and a fixed
-   gradient sits behind the whole page for them to pick up.
+   Ported from the trading desk. One slate-blue family carries the whole
+   interface — #06141B #11212D #253745 #4A5C6A #9BA8AB #CCD0CF, near-black to
+   pale grey. Green, red and amber are reserved for meaning and never used as
+   chrome.
 
-   Blur is applied only to the outer cards (slate-800/900). Nested rows use the
-   lighter slate-700 steps as a plain tint — stacking backdrop-filter on every
-   nested surface is both expensive and muddy, since each layer re-blurs the one
-   beneath it.                                                                */
+   Same mechanism as .light above: redefine the slate scale rather than touch
+   components, so every bg-slate-N / text-slate-N follows. Day is white frost
+   over the pale end with dark text; night is slate glass over the dark end
+   with light text.                                                          */
 
 .glass-dark,
 .glass-grey {
-  --blur: blur(22px) saturate(150%);
+  --r-card: 22px;
+  --r-tile: 14px;
+  /* blur softens what is behind; saturate keeps it from going muddy */
+  --blur: blur(24px) saturate(1.4);
 }
 
+/* ── Night: slate glass over the palette's near-black end ───────────────── */
 .glass-dark {
-  --color-slate-950: rgba(0, 0, 0, .28);
-  --color-slate-900: rgba(22, 24, 30, .42);
-  --color-slate-800: rgba(26, 28, 36, .46);
-  --color-slate-700: rgba(255, 255, 255, .10);
-  /* slate-600/500 double as borders and muted text, so they stay opaque greys —
-     at a border's alpha they would be unreadable as text. */
-  --color-slate-600: oklch(50% .03 257);
-  --color-slate-500: oklch(62% .035 257);
-  --color-slate-400: oklch(72% .038 257);
-  --color-slate-300: oklch(84% .028 257);
-  --color-slate-200: oklch(91% .02  257);
-  --color-slate-100: oklch(96% .012 257);
-  --color-slate-50:  oklch(98% .006 257);
+  --color-slate-950: rgba(6, 20, 27, .45);
+  --color-slate-900: rgba(37, 55, 69, .42);
+  --color-slate-800: rgba(37, 55, 69, .46);
+  --color-slate-700: rgba(74, 92, 106, .38);
+  --color-slate-600: #7f8f98;
+  --color-slate-500: #95a3a7;
+  --color-slate-400: #9BA8AB;
+  --color-slate-300: #b6c0c1;
+  --color-slate-200: #c3cac9;
+  --color-slate-100: #CCD0CF;
+  --color-slate-50:  #e4e7e6;
+
+  --glass-edge: rgba(155, 168, 171, .14);
+  --glass-hi:   rgba(74, 92, 106, .38);
+  --pill-on-bg: #CCD0CF;
+  --pill-on-fg: #06141B;
+
+  /* Four-layer elevation: lit top edge, shaded bottom edge, tight contact
+     shadow, soft ambient lift. */
+  --elev:    inset 0 1px 0 rgba(204, 208, 207, .14), inset 0 -1px 0 rgba(0, 0, 0, .35),
+             0 1px 2px rgba(0, 0, 0, .40), 0 14px 36px -10px rgba(0, 0, 0, .65);
+  --elev-sm: inset 0 1px 0 rgba(204, 208, 207, .16), inset 0 -1px 0 rgba(0, 0, 0, .35),
+             0 1px 2px rgba(0, 0, 0, .45), 0 4px 12px -4px rgba(0, 0, 0, .55);
 
   --backdrop:
-    radial-gradient(50% 45% at 15% 10%,  rgba(41,98,255,.30) 0%, rgba(41,98,255,0) 60%),
-    radial-gradient(45% 45% at 90% 15%,  rgba(8,153,129,.28) 0%, rgba(8,153,129,0) 60%),
-    radial-gradient(60% 50% at 70% 100%, rgba(200,151,74,.22) 0%, rgba(200,151,74,0) 65%),
-    linear-gradient(160deg, #11131a 0%, #0b0c10 60%, #07080a 100%);
-  --glass-edge: rgba(255, 255, 255, .10);
-  --glass-line: rgba(255, 255, 255, .14);
-  --glass-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+    radial-gradient(38% 34% at 6% 4%,   rgba(155,168,171,.42) 0%, rgba(155,168,171,0) 70%),
+    radial-gradient(30% 34% at 86% 22%, rgba(74,92,106,.45) 0%, rgba(74,92,106,0) 70%),
+    radial-gradient(34% 30% at 40% 78%, rgba(37,55,69,.70) 0%, rgba(37,55,69,0) 70%),
+    radial-gradient(22% 24% at 72% 92%, rgba(74,92,106,.35) 0%, rgba(74,92,106,0) 70%),
+    linear-gradient(160deg, #253745 0%, #11212D 38%, #06141B 100%);
 }
 
+/* ── Day: white frost at 55% over the palette's pale end ────────────────── */
 .glass-grey {
-  --color-slate-950: rgba(255, 255, 255, .32);
-  --color-slate-900: rgba(255, 255, 255, .30);
-  --color-slate-800: rgba(255, 255, 255, .38);
-  --color-slate-700: rgba(255, 255, 255, .62);
-  /* slate-600/500 double as borders and muted text, so they stay opaque greys —
-     at a border's alpha they would be unreadable as text. */
-  --color-slate-600: oklch(60% .022 257);
-  --color-slate-500: oklch(52% .028 257);
-  --color-slate-400: oklch(42% .03  257);
-  --color-slate-300: oklch(32% .032 257);
-  --color-slate-200: oklch(26% .034 257);
-  --color-slate-100: oklch(20% .036 257);
-  --color-slate-50:  oklch(16% .03  257);
+  --color-slate-950: rgba(204, 208, 207, .55);
+  --color-slate-900: rgba(255, 255, 255, .55);
+  --color-slate-800: rgba(255, 255, 255, .58);
+  --color-slate-700: rgba(255, 255, 255, .80);
+  --color-slate-600: #66767f;
+  --color-slate-500: #4A5C6A;
+  --color-slate-400: #3d4e5b;
+  --color-slate-300: #253745;
+  --color-slate-200: #1a2a37;
+  --color-slate-100: #06141B;
+  --color-slate-50:  #06141B;
+
+  --glass-edge: rgba(255, 255, 255, .70);
+  --glass-hi:   rgba(255, 255, 255, .80);
+  --pill-on-bg: #11212D;
+  --pill-on-fg: #CCD0CF;
+
+  /* Ambient shadow tinted with the palette's darkest slate rather than black. */
+  --elev:    inset 0 1px 0 rgba(255, 255, 255, .85), inset 0 -1px 0 rgba(6, 20, 27, .06),
+             0 1px 2px rgba(6, 20, 27, .10), 0 12px 32px -10px rgba(17, 33, 45, .35);
+  --elev-sm: inset 0 1px 0 rgba(255, 255, 255, .80), inset 0 -1px 0 rgba(6, 20, 27, .08),
+             0 1px 2px rgba(6, 20, 27, .12), 0 4px 10px -4px rgba(17, 33, 45, .30);
 
   --backdrop:
-    radial-gradient(50% 45% at 12% 8%,   rgba(235,238,242,.75) 0%, rgba(235,238,242,0) 62%),
-    radial-gradient(45% 45% at 90% 12%,  rgba(185,194,208,.80) 0%, rgba(185,194,208,0) 62%),
-    radial-gradient(60% 50% at 70% 100%, rgba(110,120,135,.55) 0%, rgba(110,120,135,0) 65%),
-    radial-gradient(40% 40% at 25% 75%,  rgba(150,160,175,.60) 0%, rgba(150,160,175,0) 70%),
-    linear-gradient(165deg, #cdd1d7 0%, #b3b9c1 55%, #959ca6 100%);
-  --glass-edge: rgba(255, 255, 255, .55);
-  --glass-line: rgba(255, 255, 255, .75);
-  --glass-shadow: 0 10px 36px rgba(20, 28, 40, .20);
+    radial-gradient(32% 30% at 14% 18%, rgba(255,255,255,.85) 0%, rgba(255,255,255,0) 70%),
+    radial-gradient(28% 34% at 82% 26%, rgba(74,92,106,.45) 0%, rgba(74,92,106,0) 70%),
+    radial-gradient(36% 30% at 58% 88%, rgba(37,55,69,.35) 0%, rgba(37,55,69,0) 70%),
+    radial-gradient(24% 26% at 30% 70%, rgba(155,168,171,.75) 0%, rgba(155,168,171,0) 70%),
+    linear-gradient(160deg, #CCD0CF 0%, #b7bfc1 50%, #9BA8AB 100%);
+}
+
+:is(.glass-dark, .glass-grey) body {
+  background: var(--backdrop) fixed;
+}
+
+/* Glass surface on every floating block. Blur is applied only to the outer
+   cards — stacking backdrop-filter on nested surfaces re-blurs the layer
+   beneath and turns muddy, so inner tiles use a plain tint. */
+:is(.glass-dark, .glass-grey) :is(
+  [class~="bg-slate-800"],
+  [class~="bg-slate-900"]
+) {
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--elev);
+  border-radius: var(--r-card);
+}
+
+/* Tiles and rows: the smaller radius and a lighter lift. */
+:is(.glass-dark, .glass-grey) :is(
+  [class~="bg-slate-800/60"],
+  [class~="bg-slate-900/60"],
+  [class~="bg-slate-700/30"],
+  [class~="bg-slate-700/40"],
+  [class~="bg-slate-700/60"]
+) {
+  border-radius: var(--r-tile);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--elev-sm);
+}
+
+/* Hairline dividers belong to the flat themes; glass separates with gaps. */
+:is(.glass-dark, .glass-grey) :is(
+  [class~="border-b"],
+  [class~="border-t"],
+  [class~="divide-y"]
+) {
+  border-bottom-color: transparent;
+  border-top-color: transparent;
+}
+:is(.glass-dark, .glass-grey) thead :is([class~="border-b"], tr) {
+  border-bottom-color: var(--glass-edge);
+}
+
+/* Sticky table headers, so a long trade list keeps its column labels. */
+:is(.glass-dark, .glass-grey) thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+/* Selected / hovered rows pick up the raised tint rather than a border. */
+:is(.glass-dark, .glass-grey) tbody tr:hover {
+  background: var(--glass-hi);
+}
+
+/* Readability where blur is unsupported: fall back to a near-solid card. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-dark { --color-slate-900: rgba(17, 33, 45, .95); --color-slate-800: rgba(17, 33, 45, .95); }
+  .glass-grey { --color-slate-900: rgba(236, 239, 238, .95); --color-slate-800: rgba(236, 239, 238, .95); }
 }
 
 /* ── Signal colours ───────────────────────────────────────────────────────
-   TradingView's own up/down tokens, as used by the trading desk: the 500 steps
-   are the candle colours, the 400/300 steps the lighter variants for text on
-   dark surfaces. Charts and the heatmap read these rather than hardcoding a
-   hex, so a light backdrop gets the darker, saturated pair instead of the
-   washed-out 400s.                                                            */
+   The only hues in the interface. Charts and the heatmap read these rather
+   than hardcoding a hex, so a light backdrop gets the darker, saturated pair
+   instead of the washed-out 400 steps.                                      */
 :root {
-  --sig-green:     #22ab94;        /* minty-green-400 — on dark      */
+  --sig-green:     #22ab94;
   --sig-green-rgb: 34 171 148;
-  --sig-red:       #f7525f;        /* ripe-red-400                   */
+  --sig-red:       #f7525f;
   --sig-red-rgb:   242 54 69;
   --sig-amber:     #c8974a;
 
-  --chart-grid: rgba(148, 163, 184, .12);
-  --chart-axis: #7b8794;
-  --chart-zero: rgba(148, 163, 184, .35);
+  --chart-grid: rgba(155, 168, 171, .12);
+  --chart-axis: #95a3a7;
+  --chart-zero: rgba(155, 168, 171, .35);
 
-  --heat-green-lo: #42bda8;        /* minty-green-300 — faint cells  */
-  --heat-green-hi: #eafff8;        /* on a saturated cell            */
+  --heat-green-lo: #42bda8;
+  --heat-green-hi: #eafff8;
   --heat-red-lo:   #f7525f;
   --heat-red-hi:   #fff1f2;
-  --heat-zero-bg:  #1e293b;
-  --heat-zero-fg:  #64748b;
-  --heat-empty-fg: #475569;
+  --heat-zero-bg:  rgba(155, 168, 171, .10);
+  --heat-zero-fg:  #95a3a7;
+  --heat-empty-fg: #7f8f98;
 }
 
 /* Light surfaces: the 400-step pair washes out, so drop to the darker greens
@@ -124,54 +205,92 @@ body {
 .glass-grey {
   --sig-green:     #067a64;
   --sig-green-rgb: 6 122 100;
-  --sig-red:       #cc2433;
-  --sig-red-rgb:   204 36 51;
-  --sig-amber:     #a8650f;
+  --sig-red:       #c42232;
+  --sig-red-rgb:   196 34 50;
+  --sig-amber:     #9a5f12;
 
-  --chart-grid: rgba(20, 28, 40, .10);
-  --chart-axis: #525963;
-  --chart-zero: rgba(20, 28, 40, .25);
+  --chart-grid: rgba(6, 20, 27, .10);
+  --chart-axis: #4A5C6A;
+  --chart-zero: rgba(6, 20, 27, .25);
 
   --heat-green-lo: #05614f;
   --heat-green-hi: #ffffff;
   --heat-red-lo:   #a81d29;
   --heat-red-hi:   #ffffff;
-  --heat-zero-bg:  rgba(20, 28, 40, .06);
-  --heat-zero-fg:  #525963;
+  --heat-zero-bg:  rgba(6, 20, 27, .06);
+  --heat-zero-fg:  #4A5C6A;
   --heat-empty-fg: #8b9099;
 
-  /* Tailwind's own emerald/red utilities, used for figures throughout */
   --color-emerald-400: #067a64;
   --color-emerald-300: #067a64;
-  --color-red-400:     #cc2433;
-  --color-red-300:     #cc2433;
-  --color-amber-300:   #a8650f;
-  --color-violet-400:  #5b3fd6;
-  --color-blue-300:    #1e52d6;
-  --color-orange-300:  #a8560f;
+  --color-red-400:     #c42232;
+  --color-red-300:     #c42232;
+  --color-amber-300:   #9a5f12;
+  --color-violet-400:  #4a3fa8;
+  --color-blue-300:    #2457d6;
+  --color-orange-300:  #9a5f12;
 }
 
-:is(.glass-dark, .glass-grey) body {
-  background: var(--backdrop) fixed;
-  background-attachment: fixed;
+/* ── Glass chrome ─────────────────────────────────────────────────────────
+   A few structural pieces need naming rather than a slate class, because
+   under glass they are not cards: the page root is the backdrop itself, and
+   the bars are pills.                                                       */
+
+/* The page root carries bg-slate-900 for the flat themes. Under glass that
+   would wrap the whole document in one giant frosted card and hide the
+   backdrop, so it goes transparent and the cards float on the gradient. */
+:is(.glass-dark, .glass-grey) .page-root {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  padding: 14px 14px 20px;
 }
 
-/* Outer cards get the blur and a lit top edge. */
-:is(.glass-dark, .glass-grey) :is(
-  [class~="bg-slate-800"],
-  [class~="bg-slate-900"],
-  [class~="bg-slate-900/60"],
-  [class~="bg-slate-800/60"]
-) {
+:is(.glass-dark, .glass-grey) .app-bar {
+  background: var(--color-slate-900);
   -webkit-backdrop-filter: var(--blur);
   backdrop-filter: var(--blur);
   border: 1px solid var(--glass-edge);
-  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-line);
+  box-shadow: var(--elev);
+  border-radius: 999px;
+  padding: 9px 20px;
+  margin-bottom: 12px;
 }
 
-/* Where blur is unsupported, fall back to a near-solid card so text stays
-   readable rather than sitting on a transparent gradient. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass-dark { --color-slate-900: rgba(18, 19, 24, .94); --color-slate-800: rgba(24, 26, 32, .94); }
-  .glass-grey { --color-slate-900: rgba(240, 242, 245, .94); --color-slate-800: rgba(246, 247, 249, .94); }
+:is(.glass-dark, .glass-grey) .account-rail {
+  border-radius: 999px;
+  padding: 4px;
+  background: var(--color-slate-950);
+  border: 1px solid var(--glass-edge);
+  box-shadow: none;
+}
+
+:is(.glass-dark, .glass-grey) .account-tab { border-radius: 999px; }
+
+/* Active state: a solid inverted pill — dark in day, light at night. */
+:is(.glass-dark, .glass-grey) .account-tab[aria-pressed="true"] {
+  background: var(--pill-on-bg);
+  color: var(--pill-on-fg);
+  box-shadow: var(--elev-sm);
+}
+
+/* Flat themes keep the original filled-slate active tab. */
+.account-tab[aria-pressed="true"] { background: var(--color-slate-600); color: var(--color-slate-100); }
+
+/* The rail holds nine accounts; let it scroll inside its own pill rather than
+   widening the page and leaving the bar hanging off-screen. */
+.account-rail {
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+.account-rail::-webkit-scrollbar { display: none; }
+.account-rail > button { flex: 0 0 auto; }
+
+/* Mobile: one column, page scrolls as a whole. */
+@media (max-width: 1000px) {
+  :is(.glass-dark, .glass-grey) .app-bar { border-radius: var(--r-card); }
+  :is(.glass-dark, .glass-grey) .page-root { padding: 10px 10px 16px; }
 }
