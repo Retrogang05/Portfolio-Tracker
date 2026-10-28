@@ -259,7 +259,7 @@ body {
   margin-bottom: 12px;
 }
 
-:is(.glass-dark, .glass-grey) .account-rail {
+:is(.glass-dark, .glass-grey) .pill-rail {
   border-radius: 999px;
   padding: 4px;
   background: var(--color-slate-950);
@@ -267,17 +267,25 @@ body {
   box-shadow: none;
 }
 
-:is(.glass-dark, .glass-grey) .account-tab { border-radius: 999px; }
+:is(.glass-dark, .glass-grey) .pill-tab { border-radius: 999px; }
 
-/* Active state: a solid inverted pill — dark in day, light at night. */
-:is(.glass-dark, .glass-grey) .account-tab[aria-pressed="true"] {
-  background: var(--pill-on-bg);
-  color: var(--pill-on-fg);
-  box-shadow: var(--elev-sm);
+/* Active state is the one signal the chrome is allowed: a solid inverted pill,
+   dark by day and light at night. Every segmented control uses it — account
+   tabs, Options/Stocks, the Selfwealth market switch, the FY filter and the
+   section buttons — so no part of the interface needs a hue of its own. */
+.pill-tab[aria-pressed="true"] {
+  background: var(--pill-on-bg, var(--color-slate-600));
+  color: var(--pill-on-fg, var(--color-slate-100));
+  box-shadow: var(--elev-sm, none);
 }
 
-/* Flat themes keep the original filled-slate active tab. */
-.account-tab[aria-pressed="true"] { background: var(--color-slate-600); color: var(--color-slate-100); }
+/* The section buttons carry their own border; drop it when they go solid. */
+.pill-tab[aria-pressed="true"] { border-color: transparent; }
+
+/* Hover on an inactive pill: a light tint rather than a slate block. */
+:is(.glass-dark, .glass-grey) .pill-tab:not([aria-pressed="true"]):hover {
+  background: var(--glass-hi);
+}
 
 /* The rail holds nine accounts; let it scroll inside its own pill rather than
    widening the page and leaving the bar hanging off-screen. */

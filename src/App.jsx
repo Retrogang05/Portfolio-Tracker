@@ -589,7 +589,7 @@ export default function App() {
           </div>
 
           {/* Portfolio switcher */}
-          <div className="account-rail flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+          <div className="pill-rail account-rail flex items-center gap-1 bg-slate-800 rounded-lg p-1">
             {portfolios.map((pf, i) => {
               const pfBroker = PORTFOLIO_BROKER[i] ?? 'tastytrade'
               return (
@@ -605,7 +605,7 @@ export default function App() {
                       setView('stocks')
                     }
                   }}
-                  className={`account-tab px-3 py-1 rounded text-sm transition-colors ${
+                  className={`pill-tab px-3 py-1 rounded text-sm transition-colors ${
                     active === i ? 'font-medium' : 'text-slate-400 hover:text-slate-200'
                   }`}
                   aria-pressed={active === i}
@@ -705,11 +705,12 @@ export default function App() {
           {/* Dividend Income button */}
           <button
             onClick={() => { setShowDividends(v => !v); setShowTax(false); setShowCombined(false); setShowJournal(false) }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            className={`pill-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showDividends
-                ? 'bg-emerald-700 border-emerald-600 text-white'
+                ? 'border-transparent'
                 : 'bg-slate-800 border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200'
             }`}
+            aria-pressed={showDividends}
           >
             💰 Dividends
           </button>
@@ -717,11 +718,12 @@ export default function App() {
           {/* Journal button */}
           <button
             onClick={() => { setShowJournal(v => !v); setShowTax(false); setShowCombined(false); setShowDividends(false) }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            className={`pill-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showJournal
-                ? 'bg-amber-700 border-amber-600 text-white'
+                ? 'border-transparent'
                 : 'bg-slate-800 border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200'
             }`}
+            aria-pressed={showJournal}
           >
             📓 Journal
           </button>
@@ -729,11 +731,12 @@ export default function App() {
           {/* Combined Overview button */}
           <button
             onClick={() => { setShowCombined(v => !v); setShowTax(false); setShowDividends(false); setShowJournal(false) }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            className={`pill-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showCombined
-                ? 'bg-blue-700 border-blue-600 text-white'
+                ? 'border-transparent'
                 : 'bg-slate-800 border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200'
             }`}
+            aria-pressed={showCombined}
           >
             📊 Combined
           </button>
@@ -741,11 +744,12 @@ export default function App() {
           {/* Tax Centre tab button */}
           <button
             onClick={() => { setShowTax(v => !v); setShowCombined(false); setShowDividends(false); setShowJournal(false) }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            className={`pill-tab flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
               showTax
-                ? 'bg-violet-700 border-violet-600 text-white'
+                ? 'border-transparent'
                 : 'bg-slate-800 border-slate-700 hover:border-slate-600 text-slate-400 hover:text-slate-200'
             }`}
+            aria-pressed={showTax}
           >
             🧾 Tax Centre
           </button>
@@ -964,24 +968,26 @@ export default function App() {
 
                 {/* Options / Stocks toggle — Tasty/IBKR only */}
                 {!isEquityOnly && (
-                  <div className="bg-slate-800 rounded-lg p-1 flex gap-1 shrink-0">
+                  <div className="pill-rail bg-slate-800 rounded-lg p-1 flex gap-1 shrink-0">
                     <button
                       onClick={() => setView('options')}
-                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      className={`pill-tab px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                         view === 'options'
-                          ? 'bg-violet-600 text-white'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                          ? ''
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
+                      aria-pressed={view === 'options'}
                     >
                       Options
                     </button>
                     <button
                       onClick={() => setView('stocks')}
-                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      className={`pill-tab px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                         view === 'stocks'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                          ? ''
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
+                      aria-pressed={view === 'stocks'}
                     >
                       Stocks
                     </button>
@@ -1016,24 +1022,26 @@ export default function App() {
 
                 {/* AUS / US market selector — Selfwealth only, and only when US data exists */}
                 {isSelfwealth && p.equityDataUS?.closedPositions?.length + p.equityDataUS?.openPositions?.length > 0 && (
-                  <div className="bg-slate-800 rounded-lg p-1 flex gap-1 shrink-0">
+                  <div className="pill-rail bg-slate-800 rounded-lg p-1 flex gap-1 shrink-0">
                     <button
                       onClick={() => setSwMarket('aus')}
-                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      className={`pill-tab px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                         swMarket === 'aus'
-                          ? 'bg-emerald-700 text-white'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                          ? ''
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
+                      aria-pressed={swMarket === 'aus'}
                     >
                       AUS <span className="text-xs opacity-70">AUD</span>
                     </button>
                     <button
                       onClick={() => setSwMarket('us')}
-                      className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      className={`pill-tab px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                         swMarket === 'us'
-                          ? 'bg-blue-700 text-white'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                          ? ''
+                          : 'text-slate-400 hover:text-slate-200'
                       }`}
+                      aria-pressed={swMarket === 'us'}
                     >
                       US <span className="text-xs opacity-70">USD</span>
                     </button>
@@ -1059,11 +1067,10 @@ export default function App() {
                         <button
                           key={fy}
                           onClick={() => setFilterFY(fy)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            filterFY === fy
-                              ? 'bg-violet-600 text-white'
-                              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
+                          className={`pill-tab px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            filterFY === fy ? '' : 'text-slate-500 hover:text-slate-300'
                           }`}
+                          aria-pressed={filterFY === fy}
                         >
                           FY{fy}
                         </button>
