@@ -4,27 +4,39 @@ import { STRATEGY_NAMES } from '../utils/identifyStrategy'
 
 const PAGE_SIZE = 20
 
+// Grouped by what the trade IS, not by picking distinct hues — short/credit
+// legs share the green-teal end, long/debit legs the indigo-rose end, verticals
+// and four-leg structures the blues and violets.
+//
+// Orange, amber, yellow and lime are deliberately absent. Their dark step is
+// brown or olive, so a night badge came out as yellow text on a brown tile.
+// There is no fix at the colour level: a dark yellow IS brown.
 const STRATEGY_COLORS = {
+  // Four-leg, defined risk
   'Iron Condor':               'bg-violet-900/50 text-violet-300',
   'Iron Butterfly':            'bg-purple-900/50 text-purple-300',
   'Reverse Iron Condor':       'bg-violet-900/30 text-violet-400',
   'Reverse Iron Butterfly':    'bg-purple-900/30 text-purple-400',
+  // Verticals
   'Bull Put Spread':           'bg-emerald-900/50 text-emerald-300',
-  'Bear Put Spread':           'bg-red-900/50 text-red-300',
+  'Bear Put Spread':           'bg-rose-900/50 text-rose-300',
   'Bull Call Spread':          'bg-blue-900/50 text-blue-300',
-  'Bear Call Spread':          'bg-orange-900/50 text-orange-300',
+  'Bear Call Spread':          'bg-sky-900/50 text-sky-300',
+  // Volatility
   'Short Straddle':            'bg-fuchsia-900/50 text-fuchsia-300',
   'Long Straddle':             'bg-fuchsia-900/30 text-fuchsia-400',
   'Short Strangle':            'bg-pink-900/50 text-pink-300',
   'Long Strangle':             'bg-pink-900/30 text-pink-400',
-  'Jade Lizard':               'bg-lime-900/50 text-lime-300',
-  'Inverted Jade Lizard':      'bg-yellow-900/50 text-yellow-300',
-  'Short Call':                'bg-orange-900/40 text-orange-400',
-  'Wheel (CSP)':               'bg-teal-900/50 text-teal-300',
+  'Jade Lizard':               'bg-cyan-900/50 text-cyan-300',
+  'Inverted Jade Lizard':      'bg-cyan-900/30 text-cyan-400',
+  // Short single legs — the credit side
   'Short Put':                 'bg-emerald-900/40 text-emerald-400',
+  'Short Call':                'bg-teal-900/50 text-teal-300',
+  'Wheel (CSP)':               'bg-teal-900/30 text-teal-400',
+  // Long single legs — the debit side
+  'Long Call':                 'bg-indigo-900/40 text-indigo-300',
+  'Long Put':                  'bg-rose-900/40 text-rose-400',
   'PMCC (Long Leg)':           'bg-violet-900/60 text-violet-300',
-  'Long Call':                 'bg-blue-900/40 text-blue-400',
-  'Long Put':                  'bg-red-900/40 text-red-400',
 }
 
 function fmtDate(d) {
@@ -89,7 +101,7 @@ function LegRow({ leg }) {
       <td className="px-3 py-1.5 text-slate-500 font-mono">{leg.underlying}</td>
       <td className="px-3 py-1.5" />
       <td className="px-3 py-1.5">
-        <span className={`px-1.5 py-0.5 rounded text-xs ${leg.callPut === 'CALL' ? 'bg-blue-900/40 text-blue-400' : 'bg-orange-900/40 text-orange-400'}`}>
+        <span className={`px-1.5 py-0.5 rounded text-xs ${leg.callPut === 'CALL' ? 'bg-blue-900/40 text-blue-400' : 'bg-rose-900/40 text-rose-400'}`}>
           {leg.callPut === 'CALL' ? 'Call' : 'Put'}
         </span>
       </td>
@@ -174,7 +186,7 @@ function TradeRow({ trade, note, noteKey, expanded, onToggle, onStrategyChange, 
               onSelect={newName => onStrategyChange(trade.strategyGroupId, newName)}
             />
             {trade.isDayTrade && (
-              <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-900/50 text-yellow-300 whitespace-nowrap shrink-0">
+              <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700/60 text-slate-300 whitespace-nowrap shrink-0">
                 Day
               </span>
             )}
@@ -183,7 +195,7 @@ function TradeRow({ trade, note, noteKey, expanded, onToggle, onStrategyChange, 
 
         <td className="px-3 py-2">
           {callPutLabel
-            ? <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${trade.callPut === 'CALL' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'}`}>{callPutLabel}</span>
+            ? <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${trade.callPut === 'CALL' ? 'bg-blue-900/50 text-blue-300' : 'bg-rose-900/50 text-rose-300'}`}>{callPutLabel}</span>
             : <span className="text-slate-600 text-xs">{trade.legs?.length} legs</span>
           }
         </td>

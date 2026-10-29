@@ -61,7 +61,7 @@ function LegRow({ leg, showCallPut }) {
 
       {showCallPut && (
         <span className={`text-xs px-1.5 rounded shrink-0 ${
-          leg.callPut === 'CALL' ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'
+          leg.callPut === 'CALL' ? 'bg-blue-900/50 text-blue-300' : 'bg-rose-900/50 text-rose-300'
         }`}>{leg.callPut === 'CALL' ? 'Call' : 'Put'}</span>
       )}
 
@@ -95,9 +95,9 @@ function AssignmentRow({ assignment }) {
   const isCall = assignment.callPut === 'CALL'
   const eq = assignment.equity
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-amber-900/20 ring-1 ring-amber-700/40">
-      <span className="text-amber-400 text-xs font-medium shrink-0">ASSIGNED</span>
-      <span className={`text-xs px-1.5 rounded shrink-0 ${isCall ? 'bg-blue-900/50 text-blue-300' : 'bg-orange-900/50 text-orange-300'}`}>
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-slate-700/50 ring-1 ring-slate-600/50">
+      <span className="text-slate-300 text-xs font-medium shrink-0">ASSIGNED</span>
+      <span className={`text-xs px-1.5 rounded shrink-0 ${isCall ? 'bg-blue-900/50 text-blue-300' : 'bg-rose-900/50 text-rose-300'}`}>
         {isCall ? 'Call' : 'Put'}
       </span>
       {assignment.strike > 0 && <span className="text-slate-300 font-mono">${assignment.strike}</span>}
@@ -332,9 +332,9 @@ function WheelCard({ pos }) {
 function PhaseLabel({ phase }) {
   const map = {
     CoveredCall:        { label: 'Selling Calls',   cls: 'text-blue-300' },
-    ShortPut:           { label: 'Selling Puts',    cls: 'text-orange-300' },
-    PostCallAssignment: { label: 'Stock Called Away', cls: 'text-amber-300' },
-    PostPutAssignment:  { label: 'Stock Assigned',  cls: 'text-amber-300' },
+    ShortPut:           { label: 'Selling Puts',    cls: 'text-rose-300' },
+    PostCallAssignment: { label: 'Stock Called Away', cls: 'text-slate-300' },
+    PostPutAssignment:  { label: 'Stock Assigned',  cls: 'text-slate-300' },
     SharesSold:         { label: 'Shares Sold',     cls: 'text-emerald-300' },
     Idle:               { label: 'Idle',            cls: 'text-slate-500' },
   }

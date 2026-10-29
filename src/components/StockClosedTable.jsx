@@ -233,7 +233,7 @@ export default function StockClosedTable({ closedPositions = [], totalRealizedPn
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono font-semibold text-slate-200">{t.symbol}</span>
                         {t.isDayTrade && (
-                          <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-900/50 text-yellow-300">Day</span>
+                          <span className="px-1.5 py-0.5 rounded text-xs bg-slate-700/60 text-slate-300">Day</span>
                         )}
                       </div>
                     </td>
