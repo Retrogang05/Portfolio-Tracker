@@ -302,3 +302,229 @@ body {
   :is(.glass-dark, .glass-grey) .app-bar { border-radius: var(--r-card); }
   :is(.glass-dark, .glass-grey) .page-root { padding: 10px 10px 16px; }
 }
+
+/* ── Accent scales ────────────────────────────────────────────────────────
+   The base is a blue-slate at hue ~240 with chroma 0.025-0.034 — almost
+   neutral. Accents are derived to sit with it rather than picked per hue:
+   chroma stays modest so nothing shouts next to that base, and lightness is
+   fixed per ROLE so the whole set reads as one family with only hue varying.
+
+   Badges throughout are written in the dark-theme idiom — a translucent
+   *-900 background with *-300/400 text. Mirroring the slate scale alone left
+   those at their defaults, so on day glass a pale badge carried pale text and
+   the strategy tags, Call/Put chips, ASSIGNED rows and status pills were all
+   unreadable.
+
+   Night: text at L76 on surfaces of L18-33. Day: text at L46 on L72-85.
+   The 500-700 mid-tones are untouched — they work on either surface and some
+   are solid fills. Green, red and amber keep the desk's signal values.        */
+.glass-dark {
+  --color-rose-200: oklch(76% .105 15);
+  --color-rose-300: oklch(76% .105 15);
+  --color-rose-400: oklch(76% .105 15);
+  --color-rose-800: oklch(30% .05 15);
+  --color-rose-900: oklch(30% .05 15);
+  --color-rose-950: oklch(30% .05 15);
+  --color-red-200: #f7525f;
+  --color-red-300: #f7525f;
+  --color-red-400: #f7525f;
+  --color-red-800: oklch(30% .05 25);
+  --color-red-900: oklch(30% .05 25);
+  --color-red-950: oklch(30% .05 25);
+  --color-orange-200: oklch(76% .105 55);
+  --color-orange-300: oklch(76% .105 55);
+  --color-orange-400: oklch(76% .105 55);
+  --color-orange-800: oklch(30% .05 55);
+  --color-orange-900: oklch(30% .05 55);
+  --color-orange-950: oklch(30% .05 55);
+  --color-amber-200: #c8974a;
+  --color-amber-300: #c8974a;
+  --color-amber-400: #c8974a;
+  --color-amber-800: oklch(30% .05 75);
+  --color-amber-900: oklch(30% .05 75);
+  --color-amber-950: oklch(30% .05 75);
+  --color-yellow-200: oklch(76% .105 95);
+  --color-yellow-300: oklch(76% .105 95);
+  --color-yellow-400: oklch(76% .105 95);
+  --color-yellow-800: oklch(30% .05 95);
+  --color-yellow-900: oklch(30% .05 95);
+  --color-yellow-950: oklch(30% .05 95);
+  --color-lime-200: oklch(76% .105 130);
+  --color-lime-300: oklch(76% .105 130);
+  --color-lime-400: oklch(76% .105 130);
+  --color-lime-800: oklch(30% .05 130);
+  --color-lime-900: oklch(30% .05 130);
+  --color-lime-950: oklch(30% .05 130);
+  --color-green-200: oklch(76% .105 150);
+  --color-green-300: oklch(76% .105 150);
+  --color-green-400: oklch(76% .105 150);
+  --color-green-800: oklch(30% .05 150);
+  --color-green-900: oklch(30% .05 150);
+  --color-green-950: oklch(30% .05 150);
+  --color-emerald-200: #22ab94;
+  --color-emerald-300: #22ab94;
+  --color-emerald-400: #22ab94;
+  --color-emerald-800: oklch(30% .05 162);
+  --color-emerald-900: oklch(30% .05 162);
+  --color-emerald-950: oklch(30% .05 162);
+  --color-teal-200: oklch(76% .105 190);
+  --color-teal-300: oklch(76% .105 190);
+  --color-teal-400: oklch(76% .105 190);
+  --color-teal-800: oklch(30% .05 190);
+  --color-teal-900: oklch(30% .05 190);
+  --color-teal-950: oklch(30% .05 190);
+  --color-cyan-200: oklch(76% .105 210);
+  --color-cyan-300: oklch(76% .105 210);
+  --color-cyan-400: oklch(76% .105 210);
+  --color-cyan-800: oklch(30% .05 210);
+  --color-cyan-900: oklch(30% .05 210);
+  --color-cyan-950: oklch(30% .05 210);
+  --color-sky-200: oklch(76% .105 230);
+  --color-sky-300: oklch(76% .105 230);
+  --color-sky-400: oklch(76% .105 230);
+  --color-sky-800: oklch(30% .05 230);
+  --color-sky-900: oklch(30% .05 230);
+  --color-sky-950: oklch(30% .05 230);
+  --color-blue-200: oklch(76% .105 245);
+  --color-blue-300: oklch(76% .105 245);
+  --color-blue-400: oklch(76% .105 245);
+  --color-blue-800: oklch(30% .05 245);
+  --color-blue-900: oklch(30% .05 245);
+  --color-blue-950: oklch(30% .05 245);
+  --color-indigo-200: oklch(76% .105 275);
+  --color-indigo-300: oklch(76% .105 275);
+  --color-indigo-400: oklch(76% .105 275);
+  --color-indigo-800: oklch(30% .05 275);
+  --color-indigo-900: oklch(30% .05 275);
+  --color-indigo-950: oklch(30% .05 275);
+  --color-violet-200: oklch(76% .105 295);
+  --color-violet-300: oklch(76% .105 295);
+  --color-violet-400: oklch(76% .105 295);
+  --color-violet-800: oklch(30% .05 295);
+  --color-violet-900: oklch(30% .05 295);
+  --color-violet-950: oklch(30% .05 295);
+  --color-purple-200: oklch(76% .105 310);
+  --color-purple-300: oklch(76% .105 310);
+  --color-purple-400: oklch(76% .105 310);
+  --color-purple-800: oklch(30% .05 310);
+  --color-purple-900: oklch(30% .05 310);
+  --color-purple-950: oklch(30% .05 310);
+  --color-fuchsia-200: oklch(76% .105 330);
+  --color-fuchsia-300: oklch(76% .105 330);
+  --color-fuchsia-400: oklch(76% .105 330);
+  --color-fuchsia-800: oklch(30% .05 330);
+  --color-fuchsia-900: oklch(30% .05 330);
+  --color-fuchsia-950: oklch(30% .05 330);
+  --color-pink-200: oklch(76% .105 350);
+  --color-pink-300: oklch(76% .105 350);
+  --color-pink-400: oklch(76% .105 350);
+  --color-pink-800: oklch(30% .05 350);
+  --color-pink-900: oklch(30% .05 350);
+  --color-pink-950: oklch(30% .05 350);
+}
+
+/* Day: the same roles, inverted — dark saturated text on pale tinted badges. */
+:is(.light, .glass-grey) {
+  --color-rose-200: oklch(46% .13 15);
+  --color-rose-300: oklch(46% .13 15);
+  --color-rose-400: oklch(46% .13 15);
+  --color-rose-800: oklch(91% .045 15);
+  --color-rose-900: oklch(91% .045 15);
+  --color-rose-950: oklch(91% .045 15);
+  --color-red-200: #c42232;
+  --color-red-300: #c42232;
+  --color-red-400: #c42232;
+  --color-red-800: oklch(91% .045 25);
+  --color-red-900: oklch(91% .045 25);
+  --color-red-950: oklch(91% .045 25);
+  --color-orange-200: oklch(46% .13 55);
+  --color-orange-300: oklch(46% .13 55);
+  --color-orange-400: oklch(46% .13 55);
+  --color-orange-800: oklch(91% .045 55);
+  --color-orange-900: oklch(91% .045 55);
+  --color-orange-950: oklch(91% .045 55);
+  --color-amber-200: #9a5f12;
+  --color-amber-300: #9a5f12;
+  --color-amber-400: #9a5f12;
+  --color-amber-800: oklch(91% .045 75);
+  --color-amber-900: oklch(91% .045 75);
+  --color-amber-950: oklch(91% .045 75);
+  --color-yellow-200: oklch(46% .13 95);
+  --color-yellow-300: oklch(46% .13 95);
+  --color-yellow-400: oklch(46% .13 95);
+  --color-yellow-800: oklch(91% .045 95);
+  --color-yellow-900: oklch(91% .045 95);
+  --color-yellow-950: oklch(91% .045 95);
+  --color-lime-200: oklch(46% .13 130);
+  --color-lime-300: oklch(46% .13 130);
+  --color-lime-400: oklch(46% .13 130);
+  --color-lime-800: oklch(91% .045 130);
+  --color-lime-900: oklch(91% .045 130);
+  --color-lime-950: oklch(91% .045 130);
+  --color-green-200: oklch(46% .13 150);
+  --color-green-300: oklch(46% .13 150);
+  --color-green-400: oklch(46% .13 150);
+  --color-green-800: oklch(91% .045 150);
+  --color-green-900: oklch(91% .045 150);
+  --color-green-950: oklch(91% .045 150);
+  --color-emerald-200: #067a64;
+  --color-emerald-300: #067a64;
+  --color-emerald-400: #067a64;
+  --color-emerald-800: oklch(91% .045 162);
+  --color-emerald-900: oklch(91% .045 162);
+  --color-emerald-950: oklch(91% .045 162);
+  --color-teal-200: oklch(46% .13 190);
+  --color-teal-300: oklch(46% .13 190);
+  --color-teal-400: oklch(46% .13 190);
+  --color-teal-800: oklch(91% .045 190);
+  --color-teal-900: oklch(91% .045 190);
+  --color-teal-950: oklch(91% .045 190);
+  --color-cyan-200: oklch(46% .13 210);
+  --color-cyan-300: oklch(46% .13 210);
+  --color-cyan-400: oklch(46% .13 210);
+  --color-cyan-800: oklch(91% .045 210);
+  --color-cyan-900: oklch(91% .045 210);
+  --color-cyan-950: oklch(91% .045 210);
+  --color-sky-200: oklch(46% .13 230);
+  --color-sky-300: oklch(46% .13 230);
+  --color-sky-400: oklch(46% .13 230);
+  --color-sky-800: oklch(91% .045 230);
+  --color-sky-900: oklch(91% .045 230);
+  --color-sky-950: oklch(91% .045 230);
+  --color-blue-200: oklch(46% .13 245);
+  --color-blue-300: oklch(46% .13 245);
+  --color-blue-400: oklch(46% .13 245);
+  --color-blue-800: oklch(91% .045 245);
+  --color-blue-900: oklch(91% .045 245);
+  --color-blue-950: oklch(91% .045 245);
+  --color-indigo-200: oklch(46% .13 275);
+  --color-indigo-300: oklch(46% .13 275);
+  --color-indigo-400: oklch(46% .13 275);
+  --color-indigo-800: oklch(91% .045 275);
+  --color-indigo-900: oklch(91% .045 275);
+  --color-indigo-950: oklch(91% .045 275);
+  --color-violet-200: oklch(46% .13 295);
+  --color-violet-300: oklch(46% .13 295);
+  --color-violet-400: oklch(46% .13 295);
+  --color-violet-800: oklch(91% .045 295);
+  --color-violet-900: oklch(91% .045 295);
+  --color-violet-950: oklch(91% .045 295);
+  --color-purple-200: oklch(46% .13 310);
+  --color-purple-300: oklch(46% .13 310);
+  --color-purple-400: oklch(46% .13 310);
+  --color-purple-800: oklch(91% .045 310);
+  --color-purple-900: oklch(91% .045 310);
+  --color-purple-950: oklch(91% .045 310);
+  --color-fuchsia-200: oklch(46% .13 330);
+  --color-fuchsia-300: oklch(46% .13 330);
+  --color-fuchsia-400: oklch(46% .13 330);
+  --color-fuchsia-800: oklch(91% .045 330);
+  --color-fuchsia-900: oklch(91% .045 330);
+  --color-fuchsia-950: oklch(91% .045 330);
+  --color-pink-200: oklch(46% .13 350);
+  --color-pink-300: oklch(46% .13 350);
+  --color-pink-400: oklch(46% .13 350);
+  --color-pink-800: oklch(91% .045 350);
+  --color-pink-900: oklch(91% .045 350);
+  --color-pink-950: oklch(91% .045 350);
+}
