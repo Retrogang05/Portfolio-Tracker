@@ -583,8 +583,7 @@ export default function App() {
 
       <header className="app-bar border-b border-slate-700/60 px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4 min-w-0 flex-wrap">
-          <div className="flex items-center gap-3 shrink-0">
-            <span className="text-2xl">📈</span>
+          <div className="flex items-center shrink-0">
             <span className="font-bold text-lg tracking-tight">Portfolio Tracker</span>
           </div>
 
@@ -636,24 +635,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap min-w-0">
-          {/* Look switcher */}
-          <div className="flex items-center gap-0.5 rounded-full border border-slate-700 p-0.5 shrink-0">
-            {LOOKS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                title={t.title}
-                aria-pressed={theme === t.id}
-                className="text-xs px-2.5 py-1 rounded-full transition-colors"
-                style={theme === t.id
-                  ? { background: 'var(--pill-on-bg)', color: 'var(--pill-on-fg)', boxShadow: 'var(--elev-sm)' }
-                  : { color: 'var(--color-slate-500)' }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
           {/* ── Backup controls ── */}
           <button
             onClick={handleExport}
@@ -766,6 +747,23 @@ export default function App() {
               </button>
             </>
           )}
+          {/* Look switcher — last in the bar, pushed to the right edge */}
+          <div className="flex items-center gap-0.5 rounded-full border border-slate-700 p-0.5 shrink-0 ml-auto">
+            {LOOKS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                title={t.title}
+                aria-pressed={theme === t.id}
+                className="text-xs px-2.5 py-1 rounded-full transition-colors"
+                style={theme === t.id
+                  ? { background: 'var(--pill-on-bg)', color: 'var(--pill-on-fg)', boxShadow: 'var(--elev-sm)' }
+                  : { color: 'var(--color-slate-500)' }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
