@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { fmt } from '../utils/format'
 
 // Compact formatter — no decimals, K/M suffix for large values
 function fmtC(n) {

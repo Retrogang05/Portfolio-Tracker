@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { fmt } from '../utils/format'
 import { auFY } from '../utils/calculatePnL'
-import { capitalRowId, effectiveCategory } from './CapitalMovements'
+import { effectiveCategory } from './CapitalMovements'
 import { useThemeColors } from '../utils/themeColors'
 
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']

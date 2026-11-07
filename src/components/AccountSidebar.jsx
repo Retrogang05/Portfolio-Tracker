@@ -1,4 +1,4 @@
-import { capitalRowId, effectiveCategory } from './CapitalMovements'
+import { effectiveCategory } from './CapitalMovements'
 import { fmt } from '../utils/format'
 
 function SidebarItem({ label, sublabel, value, valueColor }) {
