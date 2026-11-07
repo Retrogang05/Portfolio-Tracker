@@ -28,20 +28,37 @@ export function capitalRowId(row) {
   return `${row.timestampSec}|${row.amount}|${row.description}`
 }
 
-// Auto-detect from Tastytrade description/subType — user can override
+// Auto-detect a category — the user can override any row.
+//
+// The broker's own transaction type (subType) is trusted first; description
+// keywords are only a fallback. Keywords cut both ways, so their ORDER can never
+// be right for everyone:
+//   · a withholding line names the dividend it came from — IBKR writes
+//     "Cash Dividend ... - US Tax" — so testing "dividend" first filed tax as income
+//   · a dividend line can mention withholding — IBKR's TSM dividend reads
+//     "(Ordinary Div - NRA Withholding Exempt)" — so testing "withhold" first filed
+//     a $132.96 dividend as tax
 function autoCategory(row) {
+  const st = (row.subType || '').toLowerCase()
+
+  if (st.includes('withholding')) return 'Tax Withheld'
+  // A dividend-typed DEBIT is tax taken from a dividend. Tastytrade posts both as
+  // Sub Type "Dividend" — JPMORGAN +150.00 and -22.50, exactly the 15% treaty rate —
+  // with nothing in the description to say which is which.
+  if (st.includes('dividend')) return row.amount < 0 ? 'Tax Withheld' : 'Dividend Income'
+  if (st.includes('credit interest')) return 'Interest Received'
+  if (st.includes('debit interest'))  return 'Interest Paid'
+  if (st === 'fee')                   return 'Fees Paid'
+
+  // No decisive type — read the description. Withholding still before dividends.
   const text = `${row.description} ${row.subType}`.toLowerCase()
-  // Dividends — "dividend", "cashdiv", "cash div"
+  if (text.includes('withhold') || text.includes('tax withheld') || text.includes('dividend tax') || text.includes('foreign tax')) {
+    return 'Tax Withheld'
+  }
   if (text.includes('dividend') || text.includes('cashdiv') || text.includes('cash div')) return 'Dividend Income'
-  // Interest — positive = credit, negative = debit
   if (text.includes('interest') || text.includes('balance interest') || text.includes('credit interest')) {
     return row.amount >= 0 ? 'Interest Received' : 'Interest Paid'
   }
-  // Tax withheld on dividends
-  if (text.includes('withholding') || text.includes('tax withheld') || text.includes('dividend tax') || text.includes('foreign tax')) {
-    return 'Tax Withheld'
-  }
-  // Fees: regulatory, exchange, clearing, etc.
   if (text.includes('fee') || text.includes('regulatory') || text.includes('exchange fee') || text.includes('clearing')) {
     return 'Fees Paid'
   }

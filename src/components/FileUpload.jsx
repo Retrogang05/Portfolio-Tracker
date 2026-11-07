@@ -23,7 +23,7 @@ const BROKER_CONFIG = {
   },
   tradestation: {
     title: 'Add Tradestation Transactions',
-    hint:  'Tradestation → Account → History → Export CSV  ·  Drop multiple periods together',
+    hint:  'Tradestation → Account → History → Export CSV  ·  Drop the Trades and Cash Activity reports together',
     multi: true,   // history may be split across exports (e.g. per financial year)
   },
   tradezero: {

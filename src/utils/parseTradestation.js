@@ -257,10 +257,129 @@ function addSyntheticExpirations(rows) {
 // deliberately NOT done here — both span the whole account history (a short leg opened
 // in one export can be assigned in the next, and expirations depend on the net position
 // across every file), so they run once after all files are merged.
+// ── Cash Activity report ─────────────────────────────────────────────────────
+//
+// A separate TradeStation export ("Report Type: Cash Activity") carrying the money
+// that is not a trade: deposits, transfers, interest, dividends, withholding and
+// platform charges. Four columns — Date, Description, Amount, Currency — and the
+// description is all there is to classify on.
+
+// Description prefix → money-movement subType. Order matters: the more specific
+// patterns must win (NRA WITHHOLD: DIVIDEND is a withholding, not a dividend).
+const CASH_RULES = [
+  [/^ACATS JOURNAL/i,                    'Deposit'],          // account transfer in
+  [/^CASH RECEIVED WIRE/i,               'Deposit'],
+  [/^JNL FRM /i,                         'Deposit'],          // journal from another account
+  [/^JNL TO /i,                          'Withdrawal'],       // journal to another account
+  [/^\d+\.\d+%\d{2}\/\d{2}-\d{2}\/\d{2}/, 'Debit Interest'],  // "11.75000%07/01-07/31  $6848"
+  [/^FPL (REVENUE|INTEREST CR)/i,        'Credit Interest'],  // fully-paid lending income
+  [/^NRA WITHHOLD/i,                     'Foreign Tax Withholding'],
+  [/^TRADESTATION/i,                     'Fee'],              // platform and market-data charges
+]
+
+function classifyCash(desc, amount) {
+  for (const [re, subType] of CASH_RULES) if (re.test(desc)) return subType
+  // "CISCO SYS INC              200" — a company name and a share count, paid in.
+  if (amount > 0 && /\s\d+$/.test(desc)) return 'Dividend'
+  return amount >= 0 ? 'Deposit' : 'Withdrawal'
+}
+
+function cashRowsFrom(data, headerIdx) {
+  const headers = data[headerIdx].map(h => h.trim())
+  const raw = data.slice(headerIdx + 1).map(cells => {
+    const obj = {}
+    headers.forEach((h, i) => { obj[h] = (cells[i] || '').trim() })
+    return obj
+  }).filter(o => o.Date && o.Description)
+
+  // Same-day entries under one description that sum to zero are bookkeeping, not
+  // money: "SHORT ACCT. MARK TO MARKET" and the monthly "TradeStation Charges" both
+  // post as an exact +/- pair. Drop those. Only zero-sum groups go — two
+  // "JNL TO 210WRF95" -$20,000 rows on 8 Jul are two real withdrawals, and
+  // collapsing same-day duplicates wholesale would lose $20,000.
+  const groups = new Map()
+  for (const o of raw) {
+    const k = `${o.Date}|${o.Description}`
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k).push(o)
+  }
+  const kept = []
+  for (const g of groups.values()) {
+    const net = g.reduce((s, o) => s + parseNum(o.Amount), 0)
+    if (g.length > 1 && Math.abs(net) < 0.005) continue
+    kept.push(...g)
+  }
+
+  // "FPL Revenue" and "FPL INTEREST CR" post the SAME lending income twice. The
+  // proof is the withholding beside them: on 4 Aug, $0.08 is 30% (the NRA rate) of
+  // one $0.25 line, not of both. Keep the credit; drop the revenue line it mirrors.
+  const fplCredits = new Set(
+    kept.filter(o => /^FPL INTEREST CR/i.test(o.Description))
+        .map(o => `${o.Date}|${parseNum(o.Amount)}`)
+  )
+  const deduped = kept.filter(o =>
+    !(/^FPL REVENUE/i.test(o.Description) && fplCredits.has(`${o.Date}|${parseNum(o.Amount)}`))
+  )
+
+  const rows = deduped.map((o, i) => {
+    const date   = parseDate(o.Date)
+    const amount = parseNum(o.Amount)
+    const desc   = o.Description.replace(/\s+/g, ' ').trim()
+    const subType = classifyCash(desc, amount)
+    // A dividend line names the company rather than the ticker; keep the name so the
+    // dividend report groups it as something other than "?".
+    const payer = subType === 'Dividend' ? desc.replace(/\s+\d+$/, '').trim() : ''
+    return {
+      rowType:        'MoneyMovement',
+      date,
+      timestampSec:   Math.floor(date.getTime() / 1000).toString(),
+      orderId:        `TS-cash-${i}`,
+      subType,
+      action:         '',
+      symbol:         payer,
+      underlying:     payer,
+      instrumentType: 'Cash',
+      openClose:      null,
+      quantity:       0,
+      expiration:     '',
+      strike:         0,
+      callPut:        null,
+      price:          0,
+      commissions:    0,
+      fees:           0,
+      amount,
+      currency:       (o.Currency || 'USD').trim(),
+      description:    desc,
+      isExpiration:   false,
+    }
+  })
+
+  // Withholding on a dividend carries no payer of its own. Borrow it from the
+  // dividend paid the same day, so the dividend report can net the two.
+  for (const w of rows) {
+    if (w.subType !== 'Foreign Tax Withholding' || !/DIVIDEND/i.test(w.description)) continue
+    const div = rows.find(d => d.subType === 'Dividend' && +d.date === +w.date)
+    if (div) { w.symbol = div.symbol; w.underlying = div.underlying }
+  }
+
+  return rows
+}
+
+// Map one parsed CSV into raw rows. Detects which of TradeStation's report types it
+// is from the column header: the Trades report and the Cash Activity report are
+// separate exports, uploaded together.
+//
+// Assignment recovery and synthetic expirations are deliberately NOT done here —
+// both span the whole account history (a short leg opened in one export can be
+// assigned in the next, and expirations depend on the net position across every
+// file), so they run once after all files are merged.
 function rawRowsFrom(data) {
+  const cashIdx = data.findIndex(r => r[0] === 'Date' && r[1] === 'Description')
+  if (cashIdx !== -1) return cashRowsFrom(data, cashIdx)
+
   const headerIdx = data.findIndex(r => r[0] === 'Date' && r[1] === 'Symbol')
   if (headerIdx === -1) {
-    throw new Error('Could not find column headers. Make sure this is a Tradestation Historical Activity Report CSV.')
+    throw new Error('Could not find column headers. Make sure this is a Tradestation Trades or Cash Activity report CSV.')
   }
 
   const headers = data[headerIdx].map(h => h.trim())

@@ -261,7 +261,10 @@ export default function App() {
         equityData,
         moneyMovements,
         loading:        false,
-        error: closedTrades.length === 0 && equityData.closedPositions.length === 0 && equityData.openPositions.length === 0
+        // A cash-only upload (e.g. a TradeStation Cash Activity report on its own)
+        // has no trades but is still valid data — only error when nothing parsed.
+        error: closedTrades.length === 0 && equityData.closedPositions.length === 0 &&
+               equityData.openPositions.length === 0 && moneyMovements.length === 0
           ? 'No trades found. Make sure this is the correct CSV format for this portfolio.'
           : null,
       })
@@ -375,7 +378,8 @@ export default function App() {
     (activeEquityData && (activeEquityData.openPositions.length > 0 || activeEquityData.closedPositions.length > 0 )) ||
     (isSelfwealth && (p.equityDataAUS || p.equityDataUS)) ||
     (isComsec && p.equityData) ||
-    (isSharan && p.equityData)
+    (isSharan && p.equityData) ||
+    (p.moneyMovements?.length > 0)
 
   // ── FY helper — Indian FY (Apr–Mar) for Sharan, Australian (Jul–Jun) for all others
   const fyFn = isSharan ? inFY : auFY

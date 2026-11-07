@@ -414,3 +414,108 @@ describe('parseTradestation — history split across exports', () => {
   })
 
 })
+
+// ── Cash Activity report ──────────────────────────────────────────────────────
+
+const CASH_HEAD = [
+  '# -----------------------------------------------,,,',
+  'TradeStation Historical Activity Report,,,',
+  'Report Type: Cash Activity,,,',
+  '# -----------------------------------------------,,,',
+  ',,,',
+  '',
+  '"Date","Description","Amount","Currency"',
+].join('\n')
+
+const cash = (...rows) => [CASH_HEAD, ...rows].join('\n')
+const line = (date, desc, amount) => `"${date}","${desc}","${amount}","USD"`
+const money = rows => rows.filter(r => r.rowType === 'MoneyMovement')
+
+describe('parseTradestation — Cash Activity report', () => {
+
+  it('classifies deposits, transfers, interest, fees and dividends', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('07/06/2026', 'ACATS JOURNAL ENTRY           ', '$45,000.00'),
+      line('08/31/2026', 'CASH RECEIVED WIRE-26082413258', '$25,000.00'),
+      line('07/20/2026', 'JNL FRM 210WRF95              ', '$39,978.76'),
+      line('07/31/2026', '11.75000%07/01-07/31    $6848 ', '-$68.32'),
+      line('10/08/2026', 'TradeStation: CME Globex MD No', '-$5.00'),
+      line('10/21/2026', 'CISCO SYS INC              200', '$84.00'),
+    )))
+    const sub = d => rows.find(r => r.description.startsWith(d)).subType
+    expect(sub('ACATS')).toBe('Deposit')
+    expect(sub('CASH RECEIVED')).toBe('Deposit')
+    expect(sub('JNL FRM')).toBe('Deposit')
+    expect(sub('11.75000%')).toBe('Debit Interest')
+    expect(sub('TradeStation:')).toBe('Fee')
+    expect(sub('CISCO')).toBe('Dividend')
+  })
+
+  // MARK TO MARKET and the monthly platform charge both post as an exact +/- pair.
+  it('drops same-day pairs that net to zero', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('07/01/2026', 'SHORT ACCT. MARK TO MARKET    ', '-$377.55'),
+      line('07/01/2026', 'SHORT ACCT. MARK TO MARKET    ', '$377.55'),
+      line('07/08/2026', 'TradeStation Charges 07/26    ', '-$50.00'),
+      line('07/08/2026', 'TradeStation Charges 07/26    ', '$50.00'),
+    )))
+    expect(rows).toHaveLength(0)
+  })
+
+  // Regression guard: two -$20,000 journals on 8 Jul are two real withdrawals.
+  // Dropping same-day duplicates wholesale would lose $20,000.
+  it('keeps identical same-day rows that do not cancel', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('07/08/2026', 'JNL TO 210WRF95               ', '-$20,000.00'),
+      line('07/08/2026', 'JNL TO 210WRF95               ', '-$20,000.00'),
+    )))
+    expect(rows).toHaveLength(2)
+    expect(rows.every(r => r.subType === 'Withdrawal')).toBe(true)
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(-40000)
+  })
+
+  // FPL Revenue and FPL INTEREST CR are the same lending income posted twice — the
+  // 30% withholding beside them matches one line, not both.
+  it('counts fully-paid lending income once, not twice', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('08/04/2026', 'FPL Revenue                   ', '$0.25'),
+      line('08/04/2026', 'FPL INTEREST CR               ', '$0.25'),
+      line('08/04/2026', 'NRA WITHHOLDING               ', '-$0.08'),
+    )))
+    const interest = rows.filter(r => r.subType === 'Credit Interest')
+    expect(interest).toHaveLength(1)
+    expect(interest[0].amount).toBe(0.25)
+  })
+
+  it('keeps an FPL Revenue line that has no matching credit', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('08/04/2026', 'FPL Revenue                   ', '$0.25'),
+    )))
+    expect(rows.filter(r => r.subType === 'Credit Interest')).toHaveLength(1)
+  })
+
+  // A withholding names the dividend it came from; it is a withholding, and is
+  // linked to that dividend's payer so the two can be netted.
+  it('treats dividend withholding as tax and links it to the dividend', async () => {
+    const rows = money(await parseCSVText(cash(
+      line('10/21/2026', 'CISCO SYS INC              200', '$84.00'),
+      line('10/21/2026', 'NRA WITHHOLD: DIVIDEND        ', '-$12.60'),
+    )))
+    const div = rows.find(r => r.subType === 'Dividend')
+    const tax = rows.find(r => r.subType === 'Foreign Tax Withholding')
+    expect(div.symbol).toBe('CISCO SYS INC')
+    expect(tax.amount).toBe(-12.6)
+    expect(tax.symbol).toBe('CISCO SYS INC')
+  })
+
+  // The two reports are separate exports, uploaded together.
+  it('merges a Cash Activity report with a Trades report', async () => {
+    const rows = await parseCSVText([
+      ts(share('08/19/2026', 'Buy', '100.00', 'CSCO', '$111.56', '-$11,161.25', { comm: '-$5.00', order: '1' })),
+      cash(line('08/31/2026', 'CASH RECEIVED WIRE-26082413258', '$25,000.00')),
+    ])
+    expect(rows.filter(r => r.rowType === 'Trade')).toHaveLength(1)
+    expect(money(rows)).toHaveLength(1)
+  })
+
+})
